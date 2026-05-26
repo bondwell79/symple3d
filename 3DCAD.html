@@ -1047,7 +1047,11 @@
     function traceContour(start, data, w, h, threshold, visited) {
         let path = [];
         let curr = start;
-        let 
+        let dir = 0; // 0:E, 1:N, 2:W, 3:S
+
+        const isSolid = (p) => {
+            if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
+            
             const idx = (p.y * w + p.x);
             const r = data[idx * 4];
             const g = data[idx * 4 + 1];
@@ -1055,11 +1059,7 @@
             const brightness = (r + g + b) / 3;
 
             // Un píxel es "sólido" si es más oscuro que el umbral
-            return brightness <
-
-        const isSolid = (p) => {
-            if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
-            return data[(p.y * w + p.x) * 4 + 3] > threshold;
+            return brightness < threshold;
         };
 
         for(let i=0; i<w*h; i++) { // Límite para evitar bucles infinitos
