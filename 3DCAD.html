@@ -67,6 +67,7 @@
     <div class="menu-item">Objetos
         <div class="dropdown">
             <div class="drop-opt" id="mod-text">Añadir Texto (croquis)</div>
+            <div class="drop-opt" id="btn-mode-draw">Dibujar a Mano Alzada (croquis)</div>
             <div class="drop-opt" id="mod-plane">Añadir Rectángulo (croquis)</div>
             <div class="drop-opt" id="mod-circulo">Añadir Círculo (croquis)</div>
             <div class="drop-opt" id="mod-sphere">Añadir Esfera</div>
@@ -100,15 +101,16 @@
 </div>
 
 <div id="toolbar">
-    <button class="tool-btn active" id="btn-mode-select">EDITAR / SELECCIONAR</button>
-    <button class="tool-btn" id="btn-mode-draw">NUEVO DIBUJO 2D</button>
-    <button class="tool-btn action" id="btn-open-extrude">EXTRUIR SELECCIÓN</button>
+    <button class="tool-btn active" id="btn-mode-select" style="visibility:hidden">EDITAR / SELECCIONAR</button>
+    <button class="tool-btn" id="btn-mode-draw" style="visibility:hidden">NUEVO DIBUJO 2D</button>
+    <button class="tool-btn action" id="btn-open-extrude" >EXTRUIR SELECCIÓN</button>
 </div>
 
 <footer>
     <div class="status-part">
         <span>MODO: <b id="st-mode">SELECCIÓN</b></span>
         <span>OBJETO: <b id="st-obj">NINGUNO</b></span>
+        <span id="st-size-info" style="display:none;">DIM: <b id="st-size"></b></span>
     </div>
     <div class="status-part">
         <span>X: <span class="coord-val" id="st-x">0.00</span> mm</span>
@@ -117,6 +119,9 @@
     </div>
 </footer>
 <div id="context-menu">
+    <div id="ctx-move">Mover</div>
+    <div id="ctx-rotate">Rotar</div>
+    <div id="ctx-scale">Escalar</div>
     <div id="ctx-delete">Eliminar</div>
 </div>
 
@@ -127,9 +132,9 @@
 <script type="importmap">
     {
         "imports": {
-            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-            "three-csg-ts": "https://esm.sh/three-csg-ts"
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "three-csg-ts": "https://esm.sh/three-csg-ts"
         }
     }
 </script>
@@ -251,20 +256,32 @@
         const hud = document.getElementById('selection-hud');
         const extBtn = document.getElementById('btn-open-extrude');
         const stObj = document.getElementById('st-obj');
+        const sizeInfo = document.getElementById('st-size-info');
+        const sizeVal = document.getElementById('st-size');
         
         if (selectedObjects.length === 0) {
             hud.innerText = "Sin selección";
             stObj.innerText = "NINGUNO";
             extBtn.style.display = 'none';
+            sizeInfo.style.display = 'none';
         } else if (selectedObjects.length === 1) {
-            const type = selectedObjects[0].userData.type || "Objeto";
+            const selectedObject = selectedObjects[0];
+            const type = selectedObject.userData.type || "Objeto";
             hud.innerHTML = `SELECCIÓN: ${type}`;
             stObj.innerText = type.toUpperCase();
-            extBtn.style.display = (type === "SKETCH" || selectedObjects[0].userData.isTextSketch) ? 'block' : 'none';
+            extBtn.style.display = (type === "SKETCH" || selectedObject.userData.isTextSketch) ? 'block' : 'none';
+
+            const box = new THREE.Box3().setFromObject(selectedObject);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            sizeVal.innerText = `X:${size.x.toFixed(1)} Y:${size.y.toFixed(1)} Z:${size.z.toFixed(1)} mm`;
+            sizeInfo.style.display = 'inline';
+
         } else {
             hud.innerText = `${selectedObjects.length} objetos seleccionados`;
             stObj.innerText = "MÚLTIPLES";
             extBtn.style.display = 'none';
+            sizeInfo.style.display = 'none';
         }
         updateSceneList();
     }
@@ -560,6 +577,7 @@
             mesh.userData.type = "MESH";
             mesh.position.copy(selectedObject.position);
             mesh.rotation.copy(selectedObject.rotation);
+            mesh.scale.copy(selectedObject.scale);
             scene.add(mesh);
             objects.push(mesh);
             scene.remove(selectedObject);
@@ -580,7 +598,7 @@
             const box = new THREE.Box3().setFromObject(selectedObject);
             const size = new THREE.Vector3();
             box.getSize(size);
-            selectedObject.position.z = size.z / 2;
+            selectedObject.position.z = 0; //size.z / 2
         });
     };
 
@@ -772,6 +790,66 @@
         document.getElementById('context-menu').style.display = 'none';
     });
 
+    // --- MENÚ CONTEXTUAL EN CANVAS 3D ---
+    document.getElementById('ctx-move').onclick = () => {
+        if (selectedObjects.length > 0) tControls.setMode('translate');
+        document.getElementById('context-menu').style.display = 'none';
+    };
+    document.getElementById('ctx-rotate').onclick = () => {
+        if (selectedObjects.length > 0) tControls.setMode('rotate');
+        document.getElementById('context-menu').style.display = 'none';
+    };
+    document.getElementById('ctx-scale').onclick = () => {
+        if (selectedObjects.length > 0) tControls.setMode('scale');
+        document.getElementById('context-menu').style.display = 'none';
+    };
+
+    renderer.domElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObjects(objects, true);
+        let target = null;
+        if (intersects.length > 0) {
+            target = intersects[0].object;
+            while(target.parent && (target.parent.userData.type === "SKETCH" || target.parent.userData.type === "MESH")) {
+                 target = target.parent;
+            }
+        }
+
+        if (target) {
+            // Seleccionar el objeto si no está ya en la selección múltiple
+            if (!selectedObjects.some(o => o.uuid === target.uuid)) {
+                 clearAllHighlights();
+                 selectedObjects = [target];
+                 applySelectionHighlight(target);
+                 tControls.attach(target);
+                 updateUI();
+            }
+            
+            const menu = document.getElementById('context-menu');
+            menu.style.display = 'block';
+            menu.style.left = `${e.clientX}px`;
+            menu.style.top = `${e.clientY}px`;
+            
+            // Re-asigna la función de borrado para el objeto actual
+            document.getElementById('ctx-delete').onclick = () => {
+                if (target) {
+                    tControls.detach();
+                    removeSelectionHighlight(target); 
+                    scene.remove(target);
+                    objects = objects.filter(o => o.uuid !== target.uuid);
+                    selectedObjects = selectedObjects.filter(o => o.uuid !== target.uuid);
+                    updateUI();
+                }
+                menu.style.display = 'none';
+            };
+        }
+    });
+
     window.onresize = () => {
         const aspect = window.innerWidth / window.innerHeight;
         camera.left = frustumSize * aspect / -2;
@@ -948,54 +1026,77 @@
     }
 
 
-// --- ESCUCHA DE TECLADO (RECUPERADA) ---
-    window.addEventListener('keydown', (e) => {
-    // Esc para deseleccionar y volver a modo selección
-    if(e.key === 'Escape') {
-        setMode('SELECT');
-        if (selectedObjects.length > 0) {
-            clearAllHighlights();
+// --- ESCUCHA DE TECLADO (MEJORADA) ---
+    function globalKeyDownHandler(e) {
+        // Esc para deseleccionar y volver a modo selección
+        if (e.key === 'Escape') {
+            setMode('SELECT');
+            if (selectedObjects.length > 0) {
+                clearAllHighlights();
+                tControls.detach();
+                selectedObjects = [];
+                updateUI();
+            }
+        }
+        
+        // Suprimir o Backspace para borrar objeto
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) {
             tControls.detach();
+            selectedObjects.forEach(obj => {
+                removeSelectionHighlight(obj); 
+                scene.remove(obj);
+                objects = objects.filter(o => o.uuid !== obj.uuid);
+            });
             selectedObjects = [];
             updateUI();
         }
-    }
-        
-    // Suprimir o Backspace para borrar objeto
-    if((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) {
-        tControls.detach();
-        selectedObjects.forEach(obj => {
-            scene.remove(obj);
-            objects = objects.filter(o => o.uuid !== obj.uuid);
-        });
-        selectedObjects = [];
-        updateUI();
-    }
 
-    // Atajos de Transformación
-    if(e.key.toLowerCase() === 'w') tControls.setMode('translate'); // Mover
-    if(e.key.toLowerCase() === 'e') tControls.setMode('rotate');    // Rotar
-    if(e.key.toLowerCase() === 'r') tControls.setMode('scale');     // Escalar
+        // Atajos de Transformación
+        if (e.key.toLowerCase() === 'w') tControls.setMode('translate'); // Mover
+        if (e.key.toLowerCase() === 'e') tControls.setMode('rotate');    // Rotar
+        if (e.key.toLowerCase() === 'r') tControls.setMode('scale');     // Escalar
 
-    
-    if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
-        const orbitStep = 0.1;
-        const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
         
-        // Calculamos la nueva posición rotando sobre el eje Z
-        const x = camera.position.x;
-        const y = camera.position.y;
-        
-        const cos = Math.cos(orbitStep * direction);
-        const sin = Math.sin(orbitStep * direction);
-        
-        camera.position.x = x * cos - y * sin;
-        camera.position.y = x * sin + y * cos;
-        
-        camera.lookAt(0, 0, 0);
-        controls.update();
+        if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
+            const orbitStep = 0.1;
+            const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
+            
+            // Calculamos la nueva posición rotando sobre el eje Z
+            const x = camera.position.x;
+            const y = camera.position.y;
+            
+            const cos = Math.cos(orbitStep * direction);
+            const sin = Math.sin(orbitStep * direction);
+            
+            camera.position.x = x * cos - y * sin;
+            camera.position.y = x * sin + y * cos;
+            
+            camera.lookAt(0, 0, 0);
+            controls.update();
+        }
     }
-});
+    window.addEventListener('keydown', globalKeyDownHandler);
+
+    // Desactivar atajos de teclado globales al entrar en el input de extrusión
+    const extInput = document.getElementById('ext-h');
+    const extModal = document.getElementById('extrude-modal');
+
+    const handleInputKeydown = (e) => {
+        if (e.key === 'Escape') {
+            extModal.style.display = 'none';
+            extInput.blur(); // Quita el foco del input para reactivar los atajos
+        }
+    };
+
+    extInput.addEventListener('focus', () => {
+        window.removeEventListener('keydown', globalKeyDownHandler);
+        extInput.addEventListener('keydown', handleInputKeydown);
+    });
+
+    extInput.addEventListener('blur', () => {
+        window.addEventListener('keydown', globalKeyDownHandler);
+        extInput.removeEventListener('keydown', handleInputKeydown);
+    });
 </script>
 </body>
 </html>
