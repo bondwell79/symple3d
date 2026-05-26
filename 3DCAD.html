@@ -31,8 +31,7 @@
         .tool-btn.active { background: var(--accent); color: #000; font-weight: bold; }
         .tool-btn.action { background: #4caf50; border: none; display: none; }
 
-        #extrude-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
-        #scale-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        #extrude-modal, #scale-modal, #text-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
 
@@ -59,7 +58,7 @@
     <div class="menu-item">Herramientas
         <div class="dropdown">
             <div class="drop-opt" id="mod-center">Centrar en Cama (0,0,0)</div>
-            <div class="drop-opt" id="mod-scale">Escalar a 150mm (Fit)</div>
+            <div class="drop-opt" id="mod-scale">Escalar (Fit)</div>
             <div class="drop-opt" id="mod-ground">Apoyar en el Suelo (Z=0)</div>
             <div class="drop-opt" id="mod-merge">Fusionar</div>
             <div class="drop-opt" id="mod-flip">Reparar figura</div>
@@ -107,6 +106,23 @@
     <button id="btn-do-scale" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-left:10px">OK</button>
 </div>
 
+<div id="text-modal">
+    <h4 style="margin:0 0 10px 0">Añadir Texto</h4>
+    <div style="margin-bottom: 10px;">
+        Texto: <input type="text" id="text-input" value="TEXTO" style="width:150px;">
+    </div>
+    <div style="margin-bottom: 10px;">
+        Fuente: 
+        <select id="font-select">
+            <option value="helvetiker_regular">Helvetiker</option>
+            <option value="optimer_regular">Optimer</option>
+            <option value="gentilis_bold">Gentilis (Negrita)</option>
+            <option value="droid/droid_serif_regular">Droid Serif</option>
+        </select>
+    </div>
+    <button id="btn-do-add-text" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-top:10px">OK</button>
+</div>
+
 <div id="toolbar">
     <button class="tool-btn active" id="btn-mode-select" style="visibility:hidden">EDITAR / SELECCIONAR</button>
     <button class="tool-btn" id="btn-mode-draw" style="visibility:hidden">NUEVO DIBUJO 2D</button>
@@ -141,7 +157,7 @@
         "imports": {
         "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
         "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-        "three-csg-ts": "https://esm.sh/three-csg-ts"
+        "three-csg-ts": "https://esm.sh/three-csg-ts?external=three"
         }
     }
 </script>
@@ -167,7 +183,7 @@
         frustumSize / 2, frustumSize / -2, 
         0.1, 2000
     );
-    camera.position.set(0, -600, 300);
+    camera.position.set(0, 0, 350);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -449,21 +465,44 @@
             
             // Actualizamos los controles de transformación para que reflejen la nueva escala
             tControls.attach(selectedObject);
-            
-            alert(`Objeto escalado. Su dimensión máxima ahora es ${maxSize}mm.`);
             document.getElementById('scale-modal').style.display = 'none';
         }
     };
 
 
 
-    // Cambio 1: Añadir texto como Croquis (Shapes/Lines)
+    // Añadir texto como Croquis (con modal)
     document.getElementById('mod-text').onclick = () => {
-        const textStr = prompt("Introduce el texto para el croquis:", "TEXTO");
-        if (!textStr) return;
+        document.getElementById('text-modal').style.display = 'block';
+        document.getElementById('text-input').focus();
+    };
+
+    const fontMap = {
+        'helvetiker_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json',
+        'optimer_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/optimer_regular.typeface.json',
+        'gentilis_bold': 'https://unpkg.com/three@0.160.0/examples/fonts/gentilis_bold.typeface.json',
+        'droid/droid_serif_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/droid/droid_serif_regular.typeface.json'
+    };
+
+    document.getElementById('btn-do-add-text').onclick = () => {
+        const textStr = document.getElementById('text-input').value;
+        const fontName = document.getElementById('font-select').value;
+        
+        if (!textStr) {
+            alert("Por favor, introduce un texto.");
+            return;
+        }
+        
+        document.getElementById('text-modal').style.display = 'none';
+
+        const fontURL = fontMap[fontName];
+        if (!fontURL) {
+            alert("Fuente no válida seleccionada.");
+            return;
+        }
 
         const loader = new FontLoader();
-        loader.load('https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', (font) => {
+        loader.load(fontURL, (font) => {
             const shapes = font.generateShapes(textStr, 20);
             const group = new THREE.Group();
             group.userData.type = "SKETCH";
@@ -959,8 +998,6 @@
                         tControls.detach();
                     }
 
-                    scene.add(group);
-                    objects.push(group);
                     selectedObjects = [group];
                     tControls.attach(group);
                     updateUI();
@@ -975,12 +1012,12 @@
 
     // Función para detectar contornos (simplificada)
     function findContours(imageData) {
-        // Esta es una implementación muy básica de "marching squares"
-        // para encontrar el contorno de una forma basada en el canal alfa.
+        // Implementación para encontrar el contorno por contraste de luminosidad.
+        // Asume que el objeto es más oscuro que el fondo.
         const w = imageData.width;
         const h = imageData.height;
         const data = imageData.data;
-        const threshold = 128;
+        const threshold = 128; // Umbral de luminosidad (0=negro, 255=blanco)
         let visited = new Uint8Array(w * h);
         let contours = [];
 
@@ -989,9 +1026,13 @@
                 const idx = (y * w + x);
                 if (visited[idx]) continue;
                 
-                const alpha = data[idx * 4 + 3];
-                if (alpha > threshold) {
-                    // Empezamos a trazar un nuevo contorno desde aquí
+                const r = data[idx * 4];
+                const g = data[idx * 4 + 1];
+                const b = data[idx * 4 + 2];
+                const brightness = (r + g + b) / 3;
+
+                // Buscamos píxeles oscuros (por debajo del umbral) para iniciar el trazado
+                if (brightness < threshold) {
                     const startPoint = { x, y };
                     let contour = traceContour(startPoint, data, w, h, threshold, visited);
                     if (contour.length > 10) { // Filtrar contornos muy pequeños
@@ -1006,7 +1047,15 @@
     function traceContour(start, data, w, h, threshold, visited) {
         let path = [];
         let curr = start;
-        let dir = 0; // 0:E, 1:N, 2:W, 3:S
+        let 
+            const idx = (p.y * w + p.x);
+            const r = data[idx * 4];
+            const g = data[idx * 4 + 1];
+            const b = data[idx * 4 + 2];
+            const brightness = (r + g + b) / 3;
+
+            // Un píxel es "sólido" si es más oscuro que el umbral
+            return brightness <
 
         const isSolid = (p) => {
             if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
@@ -1052,6 +1101,7 @@
             // Cerrar diálogos modales si están abiertos
             const extrudeModal = document.getElementById('extrude-modal');
             const scaleModal = document.getElementById('scale-modal');
+            const textModal = document.getElementById('text-modal');
             
             if (extrudeModal && extrudeModal.style.display === 'block') {
                 extrudeModal.style.display = 'none';
@@ -1060,6 +1110,10 @@
             if (scaleModal && scaleModal.style.display === 'block') {
                 scaleModal.style.display = 'none';
                 return; // No hacer nada más si se cierra un modal
+            }
+            if (textModal && textModal.style.display === 'block') {
+                textModal.style.display = 'none';
+                return;
             }
             
             setMode('SELECT');
@@ -1149,6 +1203,29 @@
     scaleInput.addEventListener('blur', () => {
         window.addEventListener('keydown', globalKeyDownHandler);
         scaleInput.removeEventListener('keydown', handleScaleInputKeydown);
+    });
+
+    // Desactivar atajos de teclado globales al entrar en el input de texto
+    const textInput = document.getElementById('text-input');
+    const textModal = document.getElementById('text-modal');
+
+    const handleTextInputKeydown = (e) => {
+        if (e.key === 'Enter') {
+            document.getElementById('btn-do-add-text').click();
+        } else if (e.key === 'Escape') {
+            textModal.style.display = 'none';
+            textInput.blur();
+        }
+    };
+
+    textInput.addEventListener('focus', () => {
+        window.removeEventListener('keydown', globalKeyDownHandler);
+        textInput.addEventListener('keydown', handleTextInputKeydown);
+    });
+
+    textInput.addEventListener('blur', () => {
+        window.addEventListener('keydown', globalKeyDownHandler);
+        textInput.removeEventListener('keydown', handleTextInputKeydown);
     });
 </script>
 </body>
