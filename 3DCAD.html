@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Studio Pro - Unified Editor</title>
+    <style>
+        :root { --bg: #0a0a0a; --ui: #252526; --accent: #00d2ff; --draw: #ff3333; --status-bg: #007acc; }
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #fff; }
+        
+        header { position: fixed; top: 0; left: 0; width: 100%; height: 35px; background: var(--ui); display: flex; align-items: center; z-index: 2000; border-bottom: 1px solid #3c3c3c; }
+        .menu-item { position: relative; padding: 0 15px; cursor: pointer; font-size: 13px; line-height: 35px; }
+        .menu-item:hover { background: #3e3e42; }
+        .dropdown { display: none; position: absolute; top: 35px; left: 0; background: var(--ui); min-width: 200px; border: 1px solid #454545; box-shadow: 0 4px 10px #000; }
+        .menu-item:hover .dropdown { display: block; }
+        .drop-opt { padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; }
+        .drop-opt:hover { background: #094771; }
+
+        footer { position: fixed; bottom: 0; left: 0; width: 100%; height: 25px; background: var(--status-bg); display: flex; align-items: center; padding: 0 10px; font-size: 11px; z-index: 2000; justify-content: space-between; box-sizing: border-box; }
+        .status-part { display: flex; gap: 15px; }
+        .coord-val { color: #fff; font-weight: bold; min-width: 40px; }
+
+        #ui-overlay { position: fixed; top: 45px; left: 15px; pointer-events: none; z-index: 1000; }
+        .stat-card { background: rgba(0,0,0,0.8); padding: 10px; border-radius: 4px; border-left: 3px solid var(--accent); margin-bottom: 10px; font-family: monospace; font-size: 12px; }
+        
+        #view-panel { position: fixed; bottom: 40px; right: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; z-index: 1000; }
+        .view-btn { background: #333; color: white; border: 1px solid #555; padding: 5px; font-size: 10px; cursor: pointer; border-radius: 3px; }
+        .view-btn:hover { background: var(--accent); color: black; }
+
+        #toolbar { position: fixed; bottom: 40px; left: 20px; display: flex; gap: 8px; z-index: 1000; }
+        .tool-btn { background: #333; border: 1px solid #555; color: white; padding: 10px 18px; cursor: pointer; border-radius: 4px; font-size: 12px; }
+        .tool-btn.active { background: var(--accent); color: #000; font-weight: bold; }
+        .tool-btn.action { background: #4caf50; border: none; display: none; }
+
+        #extrude-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        input[type="file"] { display: none; }
+        canvas#img-processor { display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="menu-item">Archivo
+        <div class="dropdown">
+            <div class="drop-opt" onclick="document.getElementById('file-stl').click()">Importar STL</div>
+            <div class="drop-opt" onclick="document.getElementById('file-img').click()">Imagen a 3D (Extruir)</div>
+            <div class="drop-opt" id="btn-export">Exportar Proyecto (STL)</div>
+            <div class="drop-opt" onclick="window.location.reload()">Nuevo</div>
+        </div>
+    </div>
+    <div class="menu-item">Herramientas
+        <div class="dropdown">
+            <div class="drop-opt" id="mod-center">Centrar en Cama (0,0,0)</div>
+            <div class="drop-opt" id="mod-scale">Escalar a 100mm (Fit)</div>
+            <div class="drop-opt" id="mod-ground">Apoyar en el Suelo (Z=0)</div>
+            <div class="drop-opt" id="mod-text">Añadir Texto (Croquis)</div>
+            <div class="drop-opt" id="mod-flip">Invertir Caras (Fix Normals)</div>
+        </div>
+    </div>
+</header>
+
+<div id="ui-overlay">
+    <div class="stat-card" id="selection-hud">Sin selección</div>
+</div>
+
+<div id="view-panel">
+    <button class="view-btn" onclick="setView('top')">SUPERIOR</button>
+    <button class="view-btn" onclick="setView('front')">FRONTAL</button>
+    <button class="view-btn" onclick="setView('side')">LATERAL</button>
+    <button class="view-btn" onclick="setView('iso')">ISOMÉTRICA</button>
+</div>
+
+<div id="extrude-modal">
+    <h4 style="margin:0 0 10px 0">Ajustar Extrusión</h4>
+    Altura: <input type="number" id="ext-h" value="15" style="width:60px"> mm
+    <button id="btn-do-extrude" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-left:10px">OK</button>
+</div>
+
+<div id="toolbar">
+    <button class="tool-btn active" id="btn-mode-select">EDITAR / SELECCIONAR</button>
+    <button class="tool-btn" id="btn-mode-draw">NUEVO DIBUJO 2D</button>
+    <button class="tool-btn action" id="btn-open-extrude">EXTRUIR SELECCIÓN</button>
+</div>
+
+<footer>
+    <div class="status-part">
+        <span>MODO: <b id="st-mode">SELECCIÓN</b></span>
+        <span>OBJETO: <b id="st-obj">NINGUNO</b></span>
+    </div>
+    <div class="status-part">
+        <span>X: <span class="coord-val" id="st-x">0.00</span> mm</span>
+        <span>Y: <span class="coord-val" id="st-y">0.00</span> mm</span>
+        <span>Z: <span class="coord-val" id="st-z">0.00</span> mm</span>
+    </div>
+</footer>
+
+<input type="file" id="file-stl" accept=".stl">
+<input type="file" id="file-img" accept="image/*">
+<canvas id="img-processor"></canvas>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+    import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+
+    // --- ESCENA ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a0a);
+    
+    // Cambio 2: Cámara Ortográfica para verdadera vista Isométrica
+    const aspect = window.innerWidth / window.innerHeight;
+    const frustumSize = 400;
+    const camera = new THREE.OrthographicCamera(
+        frustumSize * aspect / -2, frustumSize * aspect / 2, 
+        frustumSize / 2, frustumSize / -2, 
+        0.1, 2000
+    );
+    camera.position.set(0, -600, 300);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const tControls = new TransformControls(camera, renderer.domElement);
+    scene.add(tControls);
+    tControls.addEventListener('dragging-changed', (e) => controls.enabled = !e.value);
+
+    const grid = new THREE.GridHelper(200, 20, 0x444444, 0x222222);
+    grid.rotateX(Math.PI/2);
+    scene.add(grid);
+    const axes = new THREE.AxesHelper(50);
+    scene.add(axes);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 1);
+    sun.position.set(100, 100, 200);
+    scene.add(sun);
+
+    let mode = 'SELECT';
+    let points = [];
+    let sketchGroup = new THREE.Group();
+    let objects = []; 
+    let selectedObject = null;
+    let selectionBox = null; // Para el recuadro 3D amarillo
+    let elasticLine = null;
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    scene.add(sketchGroup);
+
+    // --- VISTAS ---
+    window.setView = (v) => {
+        if(v === 'top') camera.position.set(0, 0, 350);
+        if(v === 'front') camera.position.set(0, -350, 0);
+        if(v === 'side') camera.position.set(350, 0, 0);
+        if(v === 'iso') camera.position.set(350, 350, 350); // Ángulo isométrico estándar
+        camera.lookAt(0,0,0);
+        controls.update();
+    };
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (mode !== 'SELECT' || e.clientY < 40 || e.clientY > window.innerHeight - 30) return;
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObjects(objects, true);
+        if (intersects.length > 0) {
+            let target = intersects[0].object;
+            while(target.parent && (target.parent.userData.type === "SKETCH" || target.parent.userData.type === "MESH")) target = target.parent;
+            
+            // Si hacemos clic en un objeto diferente, actualizamos el resaltado
+            if (selectedObject !== target) {
+                clearSelectionHighlight();
+                selectedObject = target;
+                applySelectionHighlight(selectedObject);
+            }
+            tControls.attach(selectedObject);
+
+        } // No hacemos nada si se hace clic fuera, para permitir la rotación de la cámara sin deseleccionar
+        updateUI();
+    });
+
+    function updateUI() {
+        const hud = document.getElementById('selection-hud');
+        const extBtn = document.getElementById('btn-open-extrude');
+        const stObj = document.getElementById('st-obj');
+        
+        if (!selectedObject) {
+            hud.innerText = "Sin selección";
+            stObj.innerText = "NINGUNO";
+            extBtn.style.display = 'none';
+            return;
+        }
+        const type = selectedObject.userData.type || "Objeto";
+        hud.innerHTML = `SELECCIÓN: ${type}`;
+        stObj.innerText = type.toUpperCase();
+        extBtn.style.display = (type === "SKETCH" || selectedObject.userData.isTextSketch) ? 'block' : 'none';
+    }
+
+    function applySelectionHighlight(object) {
+        if (!object || !object.isMesh) return; // Solo aplicamos a mallas, no a dibujos 2D
+
+        // 1. Guardar material original y aplicar el de selección (azul marino)
+        object.userData.originalMaterial = object.material;
+        object.material = new THREE.MeshPhongMaterial({ color: 0x00008B }); // Azul marino
+
+        // 2. Añadir aristas (azul celeste)
+        const edges = new THREE.EdgesGeometry(object.geometry);
+        const selectionEdges = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x87CEEB, linewidth: 2 }));
+        selectionEdges.userData.isHighlightEdge = true; // Lo marcamos para encontrarlo y borrarlo después
+        object.add(selectionEdges);
+
+        // 3. Añadir recuadro 3D (amarillo)
+        selectionBox = new THREE.BoxHelper(object, 0xFFFF00);
+        scene.add(selectionBox);
+    }
+
+    function clearSelectionHighlight() {
+        // Quitar recuadro de la escena
+        if (selectionBox) {
+            scene.remove(selectionBox);
+            selectionBox.geometry.dispose();
+            selectionBox.material.dispose();
+            selectionBox = null;
+        }
+
+        // Iteramos sobre TODOS los objetos para limpiar el estado de resaltado.
+        // Es más robusto que .find() si el estado se corrompe.
+        objects.forEach(obj => {
+            if (obj.userData.originalMaterial) {
+                obj.material = obj.userData.originalMaterial;
+                delete obj.userData.originalMaterial;
+                
+                const edgeChild = obj.children.find(c => c.userData.isHighlightEdge);
+                if (edgeChild) {
+                    obj.remove(edgeChild);
+                    edgeChild.geometry.dispose();
+                    edgeChild.material.dispose();
+                }
+            }
+        });
+    }
+
+    // --- FUNCIONES DE MODELADO ---
+    document.getElementById('mod-center').onclick = () => { if(selectedObject) selectedObject.position.set(0,0,0); };
+
+    document.getElementById('mod-flip').onclick = () => {
+        if (!selectedObject || !selectedObject.isMesh) {
+            alert("Por favor, selecciona una malla 3D para reparar.");
+            return;
+        }
+
+        const geometry = selectedObject.geometry;
+        if (geometry && geometry.attributes.position) {
+            const positions = geometry.attributes.position.array;
+            
+            // Cada triángulo tiene 3 vértices (9 valores en el array: x1,y1,z1, x2,y2,z2, x3,y3,z3)
+            for (let i = 0; i < positions.length; i += 9) {
+                // Guardamos las coordenadas del vértice 2
+                const x2 = positions[i + 3];
+                const y2 = positions[i + 4];
+                const z2 = positions[i + 5];
+                
+                // Movemos el vértice 3 a la posición del vértice 2
+                positions[i + 3] = positions[i + 6];
+                positions[i + 4] = positions[i + 7];
+                positions[i + 5] = positions[i + 8];
+                
+                // Colocamos las coordenadas guardadas del vértice 2 en la posición del vértice 3
+                positions[i + 6] = x2;
+                positions[i + 7] = y2;
+                positions[i + 8] = z2;
+            }
+            
+            // Notificamos a Three.js que los vértices han cambiado
+            geometry.attributes.position.needsUpdate = true;
+            
+            // Recalculamos las normales para una iluminación correcta
+            geometry.computeVertexNormals();
+            
+            alert("Objeto reparado");
+        }
+    };
+
+    document.getElementById('mod-scale').onclick = () => {
+        if (!selectedObject) {
+            alert("Por favor, selecciona un objeto para escalar.");
+            return;
+        }
+
+        // 1. Calcular el tamaño actual del objeto
+        const box = new THREE.Box3().setFromObject(selectedObject);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        // 2. Encontrar la dimensión más grande
+        const maxDim = Math.max(size.x, size.y, size.z);
+
+        if (maxDim > 0) {
+            // 3. Calcular y aplicar el factor de escala
+            const scaleFactor = 150 / maxDim; 
+            selectedObject.scale.multiplyScalar(scaleFactor);
+            
+            // Actualizamos los controles de transformación para que reflejen la nueva escala
+            tControls.attach(selectedObject);
+            
+            alert("Objeto escalado. Su dimensión máxima ahora es 150mm.");
+        }
+    };
+
+
+
+    // Cambio 1: Añadir texto como Croquis (Shapes/Lines)
+    document.getElementById('mod-text').onclick = () => {
+        const textStr = prompt("Introduce el texto para el croquis:", "TEXTO");
+        if (!textStr) return;
+
+        const loader = new FontLoader();
+        loader.load('https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', (font) => {
+            const shapes = font.generateShapes(textStr, 20);
+            const group = new THREE.Group();
+            group.userData.type = "SKETCH";
+            group.userData.isTextSketch = true;
+            group.userData.textShapes = shapes; // Guardamos las formas para extrusión posterior
+
+            shapes.forEach(shape => {
+                const points = shape.getPoints();
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff }));
+                group.add(line);
+            });
+
+            // Centrar croquis
+            const box = new THREE.Box3().setFromObject(group);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            group.children.forEach(c => c.position.sub(center));
+
+            scene.add(group);
+            objects.push(group);
+            selectedObject = group;
+            tControls.attach(group);
+            updateUI();
+        });
+    };
+
+    // --- EXTRUSIÓN ACTUALIZADA ---
+    document.getElementById('btn-open-extrude').onclick = () => document.getElementById('extrude-modal').style.display = 'block';
+    document.getElementById('btn-do-extrude').onclick = () => {
+        if (!selectedObject) return;
+        const h = parseFloat(document.getElementById('ext-h').value);
+        let geometry;
+
+        if (selectedObject.userData.isTextSketch) {
+            // Extruir desde las formas del texto
+            geometry = new THREE.ExtrudeGeometry(selectedObject.userData.textShapes, { depth: h, bevelEnabled: false });
+            geometry.center(); // CENTRAMOS LA GEOMETRÍA PARA ALINEAR SU PIVOTE
+        } else if (selectedObject.userData.points) {
+            // Extruir desde dibujo manual
+            const shape = new THREE.Shape(selectedObject.userData.points.map(p => new THREE.Vector2(p.x, p.y)));
+            geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        }
+
+        if (geometry) {
+            const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x555555 }));
+            mesh.userData.type = "MESH";
+            mesh.position.copy(selectedObject.position);
+            mesh.rotation.copy(selectedObject.rotation);
+            scene.add(mesh);
+            objects.push(mesh);
+            scene.remove(selectedObject);
+            objects = objects.filter(o => o !== selectedObject);
+            selectedObject = mesh;
+            applySelectionHighlight(mesh);
+            tControls.attach(mesh);
+            document.getElementById('extrude-modal').style.display = 'none';
+            updateUI();
+        }
+    };
+
+    // --- RESTO DE FUNCIONES (SINFÍN DE CAMBIOS) ---
+    document.getElementById('mod-ground').onclick = () => {
+        if(!selectedObject) return;
+        const box = new THREE.Box3().setFromObject(selectedObject);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        selectedObject.position.z = size.z / 2;
+    };
+
+    window.addEventListener('mousemove', (e) => {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const p = new THREE.Vector3();
+        raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), 0), p);
+        
+        if(selectedObject && mode === 'SELECT') {
+            document.getElementById('st-x').innerText = selectedObject.position.x.toFixed(2);
+            document.getElementById('st-y').innerText = selectedObject.position.y.toFixed(2);
+            document.getElementById('st-z').innerText = selectedObject.position.z.toFixed(2);
+        } else {
+            document.getElementById('st-x').innerText = p.x.toFixed(2);
+            document.getElementById('st-y').innerText = p.y.toFixed(2);
+        }
+
+        if (mode === 'DRAW' && points.length > 0) {
+            snapToGrid(p, 5);
+            if (elasticLine) sketchGroup.remove(elasticLine);
+            const geo = new THREE.BufferGeometry().setFromPoints([points[points.length-1], p]);
+            elasticLine = new THREE.Line(geo, new THREE.LineDashedMaterial({color: 0xff3333, dashSize: 2, gapSize: 1}));
+            elasticLine.computeLineDistances();
+            sketchGroup.add(elasticLine);
+        }
+    });
+
+    window.addEventListener('mousedown', (e) => {
+        if (mode !== 'DRAW' || e.clientY < 40 || e.button !== 0) return;
+        const p = new THREE.Vector3();
+        raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), 0), p);
+        snapToGrid(p, 5);
+
+        if (points.length > 2 && p.distanceTo(points[0]) < 8) {
+            finalizeSketch();
+            return;
+        }
+        points.push(p);
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(1.2), new THREE.MeshBasicMaterial({color: 0xff3333}));
+        dot.position.copy(p);
+        sketchGroup.add(dot);
+        if (points.length > 1) {
+            const geo = new THREE.BufferGeometry().setFromPoints(points);
+            sketchGroup.add(new THREE.Line(geo, new THREE.MeshBasicMaterial({color: 0x00ff00})));
+        }
+    });
+
+    function finalizeSketch() {
+        const group = new THREE.Group();
+        group.userData.type = "SKETCH";
+        group.userData.points = [...points];
+        const geo = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
+        group.add(new THREE.Line(geo, new THREE.LineBasicMaterial({color: 0x00d2ff, linewidth: 2})));
+        scene.add(group);
+        objects.push(group);
+        sketchGroup.clear();
+        points = [];
+        setMode('SELECT');
+    }
+
+    function setMode(m) {
+        if (m === 'SELECT' && points.length > 0) {
+            points = [];
+            sketchGroup.clear();
+            elasticLine = null;
+        }
+        mode = m;
+        document.getElementById('btn-mode-select').classList.toggle('active', m === 'SELECT');
+        document.getElementById('btn-mode-draw').classList.toggle('active', m === 'DRAW');
+        document.getElementById('st-mode').innerText = m === 'SELECT' ? 'SELECCIÓN' : 'DIBUJO 2D';
+        controls.enableRotate = (m === 'SELECT');
+        if(m === 'DRAW') { tControls.detach(); setView('top'); }
+    }
+
+    document.getElementById('btn-mode-select').onclick = () => setMode('SELECT');
+    document.getElementById('btn-mode-draw').onclick = () => setMode('DRAW');
+    function snapToGrid(point, gridSize) {
+        point.x = Math.round(point.x / gridSize) * gridSize;
+        point.y = Math.round(point.y / gridSize) * gridSize;
+        point.z = 0; // Forzar al plano del croquis
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (selectionBox) {
+            selectionBox.update();
+        }
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.onresize = () => {
+        const aspect = window.innerWidth / window.innerHeight;
+        camera.left = frustumSize * aspect / -2;
+        camera.right = frustumSize * aspect / 2;
+        camera.top = frustumSize / 2;
+        camera.bottom = frustumSize / -2;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+
+    // Funciones de carga STL e Imagen omitidas para brevedad pero mantenidas funcionalmente igual
+    document.getElementById('file-stl').onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const geo = new STLLoader().parse(ev.target.result);
+            const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: 0x888888}));
+            m.userData.type = "MESH";
+            scene.add(m); 
+            objects.push(m);
+            clearSelectionHighlight();
+            selectedObject = m;
+            applySelectionHighlight(m);
+            tControls.attach(m);
+            updateUI();
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    };
+    
+    document.getElementById('btn-export').onclick = () => {
+        const exporter = new STLExporter();
+        const res = exporter.parse(scene, { binary: true });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([res], {type: 'application/octet-stream'}));
+        link.download = 'modelo_3d.stl'; link.click();
+    };
+
+    // --- LÓGICA DE IMAGEN A 3D (NUEVA) ---
+    document.getElementById('file-img').onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.getElementById('img-processor');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                // Procesar la imagen para encontrar contornos
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const contours = findContours(imageData);
+
+                if (contours.length > 0) {
+                    // Por ahora, usamos el contorno más grande
+                    contours.sort((a, b) => b.length - a.length);
+                    const mainContour = contours[0];
+
+                    // Convertir los puntos del contorno a un objeto de Three.js
+                    const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
+                    
+                    // Crear un croquis (como en el dibujo manual) para visualizarlo
+                    const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
+                    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                    
+                    const group = new THREE.Group();
+                    group.userData.type = "SKETCH";
+                    group.userData.points = shape.getPoints(); // Guardamos los puntos para la extrusión
+                    group.add(line);
+
+                    scene.add(group);
+                    objects.push(group);
+                    selectedObject = group;
+                    tControls.attach(group);
+                    updateUI();
+                } else {
+                    alert("No se pudieron detectar formas en la imagen.");
+                }
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    // Función para detectar contornos (simplificada)
+    function findContours(imageData) {
+        // Esta es una implementación muy básica de "marching squares"
+        // para encontrar el contorno de una forma basada en el canal alfa.
+        const w = imageData.width;
+        const h = imageData.height;
+        const data = imageData.data;
+        const threshold = 128;
+        let visited = new Uint8Array(w * h);
+        let contours = [];
+
+        for (let y = 0; y < h - 1; y++) {
+            for (let x = 0; x < w - 1; x++) {
+                const idx = (y * w + x);
+                if (visited[idx]) continue;
+                
+                const alpha = data[idx * 4 + 3];
+                if (alpha > threshold) {
+                    // Empezamos a trazar un nuevo contorno desde aquí
+                    const startPoint = { x, y };
+                    let contour = traceContour(startPoint, data, w, h, threshold, visited);
+                    if (contour.length > 10) { // Filtrar contornos muy pequeños
+                         contours.push(contour);
+                    }
+                }
+            }
+        }
+        return contours;
+    }
+
+    function traceContour(start, data, w, h, threshold, visited) {
+        let path = [];
+        let curr = start;
+        let dir = 0; // 0:E, 1:N, 2:W, 3:S
+
+        const isSolid = (p) => {
+            if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
+            return data[(p.y * w + p.x) * 4 + 3] > threshold;
+        };
+
+        for(let i=0; i<w*h; i++) { // Límite para evitar bucles infinitos
+            path.push(curr);
+            visited[curr.y * w + curr.x] = 1;
+
+            const neighbors = [
+                {x: curr.x + 1, y: curr.y}, // E
+                {x: curr.x, y: curr.y - 1}, // N
+                {x: curr.x - 1, y: curr.y}, // W
+                {x: curr.x, y: curr.y + 1}  // S
+            ];
+            
+            let foundNext = false;
+            for(let j=0; j<4; j++) {
+                const checkDir = (dir + j + 3) % 4; // Empezar a buscar desde la izquierda
+                const next = neighbors[checkDir];
+                
+                if (isSolid(next)) {
+                    curr = next;
+                    dir = checkDir;
+                    foundNext = true;
+                    break;
+                }
+            }
+
+            if (!foundNext || (curr.x === start.x && curr.y === start.y)) {
+                break; // Terminamos el contorno
+            }
+        }
+        return path;
+    }
+
+
+// --- ESCUCHA DE TECLADO (RECUPERADA) ---
+window.addEventListener('keydown', (e) => {
+    // Esc para deseleccionar y volver a modo selección
+    if(e.key === 'Escape') {
+        setMode('SELECT');
+        if (selectedObject) {
+            clearSelectionHighlight();
+            tControls.detach();
+            selectedObject = null;
+            updateUI();
+        }
+    }
+        
+    // Suprimir o Backspace para borrar objeto
+    if((e.key === 'Delete' || e.key === 'Backspace') && selectedObject) {
+        clearSelectionHighlight(); // Limpiamos el recuadro y material antes de borrar
+        scene.remove(selectedObject);
+        objects = objects.filter(o => o !== selectedObject);
+        tControls.detach();
+        selectedObject = null;
+        updateUI();
+    }
+
+    // Atajos de Transformación
+    if(e.key.toLowerCase() === 'w') tControls.setMode('translate'); // Mover
+    if(e.key.toLowerCase() === 'e') tControls.setMode('rotate');    // Rotar
+    if(e.key.toLowerCase() === 'r') tControls.setMode('scale');     // Escalar
+
+    
+    if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
+        const orbitStep = 0.1;
+        const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
+        
+        // Calculamos la nueva posición rotando sobre el eje Z
+        const x = camera.position.x;
+        const y = camera.position.y;
+        
+        const cos = Math.cos(orbitStep * direction);
+        const sin = Math.sin(orbitStep * direction);
+        
+        camera.position.x = x * cos - y * sin;
+        camera.position.y = x * sin + y * cos;
+        
+        camera.lookAt(0, 0, 0);
+        controls.update();
+    }
+});
+</script>
+</body>
+</html>
