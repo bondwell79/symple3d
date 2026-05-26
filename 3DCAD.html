@@ -34,6 +34,14 @@
         #extrude-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
+
+        .scene-obj { padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .scene-obj:hover { background: #094771; }
+        .scene-obj.selected { background: var(--accent); color: black; font-weight: bold; }
+
+        #context-menu { display: none; position: absolute; background: #1b1b1b; border: 1px solid #555; z-index: 4000; box-shadow: 0 2px 8px #000; border-radius: 4px; }
+        #context-menu div { padding: 8px 20px; font-size: 12px; color: white; cursor: pointer; }
+        #context-menu div:hover { background: #c82333; }
     </style>
 </head>
 <body>
@@ -52,10 +60,26 @@
             <div class="drop-opt" id="mod-center">Centrar en Cama (0,0,0)</div>
             <div class="drop-opt" id="mod-scale">Escalar a 150mm (Fit)</div>
             <div class="drop-opt" id="mod-ground">Apoyar en el Suelo (Z=0)</div>
-            <div class="drop-opt" id="mod-text">Añadir Texto</div>
+            <div class="drop-opt" id="mod-merge">Fusionar</div>
             <div class="drop-opt" id="mod-flip">Reparar figura</div>
         </div>
     </div>
+    <div class="menu-item">Objetos
+        <div class="dropdown">
+            <div class="drop-opt" id="mod-text">Añadir Texto (croquis)</div>
+            <div class="drop-opt" id="mod-plane">Añadir Rectángulo (croquis)</div>
+            <div class="drop-opt" id="mod-circulo">Añadir Círculo (croquis)</div>
+            <div class="drop-opt" id="mod-sphere">Añadir Esfera</div>
+        </div>
+    </div>
+    <div class="menu-item">Escena
+        <div class="dropdown">
+            <div id="scene-object-list" style="max-height: 300px; overflow-y: auto;">
+                <!-- Los objetos de la escena se listarán aquí -->
+            </div>
+        </div>
+    </div>
+
 </header>
 
 <div id="ui-overlay">
@@ -92,6 +116,9 @@
         <span>Z: <span class="coord-val" id="st-z">0.00</span> mm</span>
     </div>
 </footer>
+<div id="context-menu">
+    <div id="ctx-delete">Eliminar</div>
+</div>
 
 <input type="file" id="file-stl" accept=".stl">
 <input type="file" id="file-img" accept="image/*">
@@ -101,7 +128,8 @@
     {
         "imports": {
             "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+            "three-csg-ts": "https://esm.sh/three-csg-ts"
         }
     }
 </script>
@@ -113,6 +141,7 @@
     import { STLExporter } from 'three/addons/exporters/STLExporter.js';
     import { STLLoader } from 'three/addons/loaders/STLLoader.js';
     import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+    import { CSG } from 'three-csg-ts';
 
     // --- ESCENA ---
     const scene = new THREE.Scene();
@@ -150,11 +179,11 @@
     scene.add(sun);
 
     let mode = 'SELECT';
+    let objectCounter = 0;
     let points = [];
     let sketchGroup = new THREE.Group();
     let objects = []; 
-    let selectedObject = null;
-    let selectionBox = null; // Para el recuadro 3D amarillo
+    let selectedObjects = [];
     let elasticLine = null;
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -172,25 +201,49 @@
     };
 
     renderer.domElement.addEventListener('pointerdown', (e) => {
-        if (mode !== 'SELECT' || e.clientY < 40 || e.clientY > window.innerHeight - 30) return;
+        if (mode !== 'SELECT' || e.clientY < 40 || e.clientY > window.innerHeight - 30 || tControls.dragging) return;
+        
         mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
 
         const intersects = raycaster.intersectObjects(objects, true);
+        let target = null;
         if (intersects.length > 0) {
-            let target = intersects[0].object;
-            while(target.parent && (target.parent.userData.type === "SKETCH" || target.parent.userData.type === "MESH")) target = target.parent;
-            
-            // Si hacemos clic en un objeto diferente, actualizamos el resaltado
-            if (selectedObject !== target) {
-                clearSelectionHighlight();
-                selectedObject = target;
-                applySelectionHighlight(selectedObject);
+            target = intersects[0].object;
+            while(target.parent && (target.parent.userData.type === "SKETCH" || target.parent.userData.type === "MESH")) {
+                 target = target.parent;
             }
-            tControls.attach(selectedObject);
+        }
 
-        } // No hacemos nada si se hace clic fuera, para permitir la rotación de la cámara sin deseleccionar
+        if (e.shiftKey) {
+            if (target) {
+                const index = selectedObjects.findIndex(obj => obj.uuid === target.uuid);
+                if (index > -1) {
+                    removeSelectionHighlight(selectedObjects[index]);
+                    selectedObjects.splice(index, 1);
+                } else {
+                    selectedObjects.push(target);
+                    applySelectionHighlight(target);
+                }
+            }
+        } else {
+            clearAllHighlights();
+            if (target) {
+                if (!selectedObjects.some(o => o.uuid === target.uuid) || selectedObjects.length > 1) {
+                    selectedObjects = [target];
+                }
+            } else {
+                selectedObjects = [];
+            }
+            selectedObjects.forEach(applySelectionHighlight);
+        }
+        
+        if (selectedObjects.length === 1) {
+            tControls.attach(selectedObjects[0]);
+        } else {
+            tControls.detach();
+        }
         updateUI();
     });
 
@@ -199,71 +252,115 @@
         const extBtn = document.getElementById('btn-open-extrude');
         const stObj = document.getElementById('st-obj');
         
-        if (!selectedObject) {
+        if (selectedObjects.length === 0) {
             hud.innerText = "Sin selección";
             stObj.innerText = "NINGUNO";
             extBtn.style.display = 'none';
-            return;
+        } else if (selectedObjects.length === 1) {
+            const type = selectedObjects[0].userData.type || "Objeto";
+            hud.innerHTML = `SELECCIÓN: ${type}`;
+            stObj.innerText = type.toUpperCase();
+            extBtn.style.display = (type === "SKETCH" || selectedObjects[0].userData.isTextSketch) ? 'block' : 'none';
+        } else {
+            hud.innerText = `${selectedObjects.length} objetos seleccionados`;
+            stObj.innerText = "MÚLTIPLES";
+            extBtn.style.display = 'none';
         }
-        const type = selectedObject.userData.type || "Objeto";
-        hud.innerHTML = `SELECCIÓN: ${type}`;
-        stObj.innerText = type.toUpperCase();
-        extBtn.style.display = (type === "SKETCH" || selectedObject.userData.isTextSketch) ? 'block' : 'none';
+        updateSceneList();
     }
 
     function applySelectionHighlight(object) {
-        if (!object || !object.isMesh) return; // Solo aplicamos a mallas, no a dibujos 2D
+        if (!object) return;
+        removeSelectionHighlight(object); // Evita duplicados
 
-        // 1. Guardar material original y aplicar el de selección (azul marino)
-        object.userData.originalMaterial = object.material;
-        object.material = new THREE.MeshPhongMaterial({ color: 0x00008B }); // Azul marino
+        if (object.isMesh) {
+             // 1. Guardar material original y aplicar el de selección (azul marino)
+            object.userData.originalMaterial = object.material;
+            object.material = new THREE.MeshPhongMaterial({ color: 0x00008B });
 
-        // 2. Añadir aristas (azul celeste)
-        const edges = new THREE.EdgesGeometry(object.geometry);
-        const selectionEdges = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x87CEEB, linewidth: 2 }));
-        selectionEdges.userData.isHighlightEdge = true; // Lo marcamos para encontrarlo y borrarlo después
-        object.add(selectionEdges);
+            // 2. Añadir aristas (azul celeste)
+            const edges = new THREE.EdgesGeometry(object.geometry);
+            const selectionEdges = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x87CEEB, linewidth: 2 }));
+            selectionEdges.userData.isHighlightEdge = true; // Lo marcamos para encontrarlo y borrarlo después
+            object.add(selectionEdges);
 
-        // 3. Añadir recuadro 3D (amarillo)
-        selectionBox = new THREE.BoxHelper(object, 0xFFFF00);
-        scene.add(selectionBox);
-    }
-
-    function clearSelectionHighlight() {
-        // Quitar recuadro de la escena
-        if (selectionBox) {
-            scene.remove(selectionBox);
-            selectionBox.geometry.dispose();
-            selectionBox.material.dispose();
-            selectionBox = null;
+            // 3. Añadir recuadro 3D (amarillo)
+            const selectionBox = new THREE.BoxHelper(object, 0xFFFF00);
+            object.userData.selectionBox = selectionBox;
+            scene.add(selectionBox);
         }
-
-        // Iteramos sobre TODOS los objetos para limpiar el estado de resaltado.
-        // Es más robusto que .find() si el estado se corrompe.
-        objects.forEach(obj => {
-            if (obj.userData.originalMaterial) {
-                obj.material = obj.userData.originalMaterial;
-                delete obj.userData.originalMaterial;
-                
-                const edgeChild = obj.children.find(c => c.userData.isHighlightEdge);
-                if (edgeChild) {
-                    obj.remove(edgeChild);
-                    edgeChild.geometry.dispose();
-                    edgeChild.material.dispose();
-                }
-            }
-        });
     }
+
+    function removeSelectionHighlight(object) {
+        if (!object) return;
+        if (object.userData.originalMaterial) {
+            object.material = object.userData.originalMaterial;
+            delete object.userData.originalMaterial;
+        }
+        const edgeChild = object.children.find(c => c.userData.isHighlightEdge);
+        if (edgeChild) {
+            object.remove(edgeChild);
+            edgeChild.geometry.dispose();
+            edgeChild.material.dispose();
+        }
+        if (object.userData.selectionBox) {
+            scene.remove(object.userData.selectionBox);
+            object.userData.selectionBox.geometry.dispose();
+            object.userData.selectionBox.material.dispose();
+            delete object.userData.selectionBox;
+        }
+    }
+    
+    function clearAllHighlights() {
+        objects.forEach(removeSelectionHighlight);
+    }
+
 
     // --- FUNCIONES DE MODELADO ---
-    document.getElementById('mod-center').onclick = () => { if(selectedObject) selectedObject.position.set(0,0,0); };
+    document.getElementById('mod-center').onclick = () => { if(selectedObjects.length > 0) selectedObjects.forEach(o => o.position.set(0,0,0)); };
 
-    document.getElementById('mod-flip').onclick = () => {
-        if (!selectedObject || !selectedObject.isMesh) {
-            alert("Por favor, selecciona una malla 3D para reparar.");
+    document.getElementById('mod-merge').onclick = () => {
+        const meshes = selectedObjects.filter(o => o.isMesh);
+        if (meshes.length < 2) {
+            alert("Por favor, selecciona al menos dos mallas 3D para fusionar.");
             return;
         }
 
+        // Actualiza las matrices del mundo para asegurar que las posiciones/rotaciones/escalas son correctas
+        meshes.forEach(mesh => mesh.updateMatrixWorld());
+
+        let resultCsg = CSG.fromMesh(meshes[0]);
+        for (let i = 1; i < meshes.length; i++) {
+            const nextCsg = CSG.fromMesh(meshes[i]);
+            resultCsg = resultCsg.union(nextCsg);
+        }
+
+        const finalMesh = CSG.toMesh(resultCsg, meshes[0].matrix);
+        finalMesh.material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
+        finalMesh.userData.type = "MESH";
+        
+        // Limpiar y añadir el nuevo objeto
+        tControls.detach();
+        meshes.forEach(mesh => {
+            removeSelectionHighlight(mesh);
+            scene.remove(mesh);
+        });
+        objects = objects.filter(o => !meshes.includes(o));
+        
+        scene.add(finalMesh);
+        objects.push(finalMesh);
+        selectedObjects = [finalMesh];
+        applySelectionHighlight(finalMesh);
+        tControls.attach(finalMesh);
+        updateUI();
+    };
+    
+    document.getElementById('mod-flip').onclick = () => {
+        if (selectedObjects.length !== 1 || !selectedObjects[0].isMesh) {
+            alert("Por favor, selecciona una única malla 3D para reparar.");
+            return;
+        }
+        const selectedObject = selectedObjects[0];
         const geometry = selectedObject.geometry;
         if (geometry && geometry.attributes.position) {
             const positions = geometry.attributes.position.array;
@@ -297,11 +394,11 @@
     };
 
     document.getElementById('mod-scale').onclick = () => {
-        if (!selectedObject) {
-            alert("Por favor, selecciona un objeto para escalar.");
+        if (selectedObjects.length !== 1) {
+            alert("Por favor, selecciona un único objeto para escalar.");
             return;
         }
-
+        const selectedObject = selectedObjects[0];
         // 1. Calcular el tamaño actual del objeto
         const box = new THREE.Box3().setFromObject(selectedObject);
         const size = new THREE.Vector3();
@@ -352,27 +449,110 @@
 
             scene.add(group);
             objects.push(group);
-            selectedObject = group;
+            
+            clearAllHighlights();
+            selectedObjects = [group];
             tControls.attach(group);
             updateUI();
         });
     };
 
+    // Añadir Rectángulo como Croquis
+    document.getElementById('mod-plane').onclick = () => {
+        const width = 100;
+        const height = 60;
+
+        const points = [
+            new THREE.Vector3(-width / 2, -height / 2, 0),
+            new THREE.Vector3(width / 2, -height / 2, 0),
+            new THREE.Vector3(width / 2, height / 2, 0),
+            new THREE.Vector3(-width / 2, height / 2, 0)
+        ];
+
+        const group = new THREE.Group();
+        group.userData.type = "SKETCH";
+        group.userData.points = points; 
+
+        const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
+        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+        group.add(line);
+        
+        scene.add(group);
+        objects.push(group);
+
+        clearAllHighlights();
+        selectedObjects = [group];
+        tControls.attach(group);
+        updateUI();
+    };
+
+    // Añadir Círculo como Croquis
+    document.getElementById('mod-circulo').onclick = () => {
+        const radius = 50;
+        const shape = new THREE.Shape();
+        shape.arc(0, 0, radius, 0, 2 * Math.PI, false);
+        shape.closePath();
+
+        const points = shape.getPoints(50); // 50 segmentos para suavidad
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        
+        const group = new THREE.Group();
+        group.userData.type = "SKETCH";
+        group.userData.shapeForExtrusion = shape; 
+
+        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+        group.add(line);
+        
+        scene.add(group);
+        objects.push(group);
+
+        clearAllHighlights();
+        selectedObjects = [group];
+        tControls.attach(group);
+        updateUI();
+    };
+
+    // Añadir Esfera 3D directamente
+    document.getElementById('mod-sphere').onclick = () => {
+        const radius = 50;
+        const geometry = new THREE.SphereGeometry(radius, 32, 16);
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x555555 }));
+        mesh.userData.type = "MESH";
+        
+        scene.add(mesh);
+        objects.push(mesh);
+
+        clearAllHighlights();
+        selectedObjects = [mesh];
+        applySelectionHighlight(mesh);
+        tControls.attach(mesh);
+        updateUI();
+    };
+
     // --- EXTRUSIÓN ACTUALIZADA ---
     document.getElementById('btn-open-extrude').onclick = () => document.getElementById('extrude-modal').style.display = 'block';
     document.getElementById('btn-do-extrude').onclick = () => {
-        if (!selectedObject) return;
+        if (selectedObjects.length !== 1) return;
+        const selectedObject = selectedObjects[0];
         const h = parseFloat(document.getElementById('ext-h').value);
+        if (isNaN(h) || h <= 0) {
+            alert("Por favor, introduce una altura de extrusión válida y positiva.");
+            return;
+        }
         let geometry;
 
         if (selectedObject.userData.isTextSketch) {
             // Extruir desde las formas del texto
             geometry = new THREE.ExtrudeGeometry(selectedObject.userData.textShapes, { depth: h, bevelEnabled: false });
-            geometry.center(); // CENTRAMOS LA GEOMETRÍA PARA ALINEAR SU PIVOTE
+            geometry.center(); // Centramos la geometría para alinear su pivote en X e Y.
+            geometry.translate(0, 0, h / 2); // La subimos en Z para que su base quede en Z=0.
         } else if (selectedObject.userData.points) {
-            // Extruir desde dibujo manual
+            // Extruir desde dibujo manual o rectángulo
             const shape = new THREE.Shape(selectedObject.userData.points.map(p => new THREE.Vector2(p.x, p.y)));
             geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        } else if (selectedObject.userData.shapeForExtrusion) {
+            // Extruir desde círculo
+            geometry = new THREE.ExtrudeGeometry(selectedObject.userData.shapeForExtrusion, { depth: h, bevelEnabled: false });
         }
 
         if (geometry) {
@@ -384,7 +564,8 @@
             objects.push(mesh);
             scene.remove(selectedObject);
             objects = objects.filter(o => o !== selectedObject);
-            selectedObject = mesh;
+            
+            selectedObjects = [mesh];
             applySelectionHighlight(mesh);
             tControls.attach(mesh);
             document.getElementById('extrude-modal').style.display = 'none';
@@ -394,11 +575,13 @@
 
     // --- RESTO DE FUNCIONES (SINFÍN DE CAMBIOS) ---
     document.getElementById('mod-ground').onclick = () => {
-        if(!selectedObject) return;
-        const box = new THREE.Box3().setFromObject(selectedObject);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        selectedObject.position.z = size.z / 2;
+        if(selectedObjects.length === 0) return;
+        selectedObjects.forEach(selectedObject => {
+            const box = new THREE.Box3().setFromObject(selectedObject);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            selectedObject.position.z = size.z / 2;
+        });
     };
 
     window.addEventListener('mousemove', (e) => {
@@ -408,13 +591,14 @@
         const p = new THREE.Vector3();
         raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1), 0), p);
         
-        if(selectedObject && mode === 'SELECT') {
-            document.getElementById('st-x').innerText = selectedObject.position.x.toFixed(2);
-            document.getElementById('st-y').innerText = selectedObject.position.y.toFixed(2);
-            document.getElementById('st-z').innerText = selectedObject.position.z.toFixed(2);
-        } else {
+        if(selectedObjects.length === 1 && mode === 'SELECT') {
+            document.getElementById('st-x').innerText = selectedObjects[0].position.x.toFixed(2);
+            document.getElementById('st-y').innerText = selectedObjects[0].position.y.toFixed(2);
+            document.getElementById('st-z').innerText = selectedObjects[0].position.z.toFixed(2);
+        } else if (selectedObjects.length === 0) {
             document.getElementById('st-x').innerText = p.x.toFixed(2);
             document.getElementById('st-y').innerText = p.y.toFixed(2);
+            document.getElementById('st-z').innerText = '0.00';
         }
 
         if (mode === 'DRAW' && points.length > 0) {
@@ -458,6 +642,7 @@
         sketchGroup.clear();
         points = [];
         setMode('SELECT');
+        updateSceneList();
     }
 
     function setMode(m) {
@@ -484,12 +669,108 @@
 
     function animate() {
         requestAnimationFrame(animate);
-        if (selectionBox) {
-            selectionBox.update();
-        }
+        controls.update();
+        selectedObjects.forEach(obj => {
+            if(obj.userData.selectionBox) obj.userData.selectionBox.update();
+        });
         renderer.render(scene, camera);
     }
+    
     animate();
+
+    function updateSceneList() {
+        const listContainer = document.getElementById('scene-object-list');
+        if (!listContainer) return;
+        listContainer.innerHTML = ''; // Clear list
+
+        if (objects.length === 0) {
+            listContainer.innerHTML = '<div class="drop-opt" style="cursor:default; color:#888;">Escena Vacía</div>';
+            return;
+        }
+
+        objects.forEach(obj => {
+            if (!obj.userData.name) {
+                objectCounter++;
+                const type = obj.userData.type || 'Object';
+                obj.userData.name = `${type}_${objectCounter}`;
+            }
+
+            const item = document.createElement('div');
+            item.className = 'scene-obj';
+            item.innerText = obj.userData.name;
+            item.title = obj.userData.name; // Tooltip for long names
+            item.dataset.uuid = obj.uuid;
+
+            if (selectedObjects.some(so => so.uuid === obj.uuid)) {
+                item.classList.add('selected');
+            }
+
+            // Click to select
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetObject = objects.find(o => o.uuid === obj.uuid);
+                if (!targetObject) return;
+
+                if (!e.shiftKey) {
+                    // Si no se pulsa Shift, deseleccionar todo y seleccionar solo este
+                    clearAllHighlights();
+                    selectedObjects = [targetObject];
+                } else {
+                    // Si se pulsa Shift, añadir o quitar de la selección
+                    const index = selectedObjects.findIndex(o => o.uuid === targetObject.uuid);
+                    if (index > -1) {
+                        removeSelectionHighlight(targetObject);
+                        selectedObjects.splice(index, 1);
+                    } else {
+                        selectedObjects.push(targetObject);
+                    }
+                }
+
+                // Actualizar resaltado y controles
+                selectedObjects.forEach(applySelectionHighlight);
+                if (selectedObjects.length === 1) {
+                    tControls.attach(selectedObjects[0]);
+                } else {
+                    tControls.detach();
+                }
+                updateUI();
+
+                // Ocultar el menú desplegable
+                const dropdown = listContainer.parentElement;
+                if (dropdown) dropdown.style.display = 'none';
+                setTimeout(() => dropdown.style.display = '', 100);
+            });
+
+            // Right-click for context menu
+            item.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const menu = document.getElementById('context-menu');
+                menu.style.display = 'block';
+                menu.style.left = `${e.clientX}px`;
+                menu.style.top = `${e.clientY}px`;
+
+                document.getElementById('ctx-delete').onclick = () => {
+                    const objectToDelete = objects.find(o => o.uuid === obj.uuid);
+                    if (objectToDelete) {
+                        tControls.detach();
+                        scene.remove(objectToDelete);
+                        objects = objects.filter(o => o !== objectToDelete);
+                        selectedObjects = selectedObjects.filter(o => o.uuid !== objectToDelete.uuid);
+                        updateUI();
+                    }
+                    menu.style.display = 'none';
+                };
+            });
+
+            listContainer.appendChild(item);
+        });
+    }
+
+    // Ocultar menú contextual con un clic global
+    window.addEventListener('click', () => {
+        document.getElementById('context-menu').style.display = 'none';
+    });
 
     window.onresize = () => {
         const aspect = window.innerWidth / window.innerHeight;
@@ -510,8 +791,8 @@
             m.userData.type = "MESH";
             scene.add(m); 
             objects.push(m);
-            clearSelectionHighlight();
-            selectedObject = m;
+            clearAllHighlights();
+            selectedObjects = [m];
             applySelectionHighlight(m);
             tControls.attach(m);
             updateUI();
@@ -520,11 +801,21 @@
     };
     
     document.getElementById('btn-export').onclick = () => {
+        const fileName = prompt("Introduce el nombre del archivo:", "modelo3d.stl");
+        if (!fileName) return; // Cancelar si no hay nombre
+
+        // 1. Ocultamos los controles antes de exportar
+        scene.remove(tControls);
+
         const exporter = new STLExporter();
         const res = exporter.parse(scene, { binary: true });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(new Blob([res], {type: 'application/octet-stream'}));
-        link.download = 'modelo_3d.stl'; link.click();
+        link.download = fileName.endsWith('.stl') ? fileName : `${fileName}.stl`;
+        link.click();
+
+        // 2. Volvemos a mostrar los controles
+        scene.add(tControls);
     };
 
     // --- LÓGICA DE IMAGEN A 3D (NUEVA) ---
@@ -555,17 +846,25 @@
                     const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
                     
                     // Crear un croquis (como en el dibujo manual) para visualizarlo
-                    const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
-                    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-                    
                     const group = new THREE.Group();
                     group.userData.type = "SKETCH";
-                    group.userData.points = shape.getPoints(); // Guardamos los puntos para la extrusión
+                    const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
+                    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                    // Para la extrusión, necesitamos una forma, no solo los puntos de la línea
+                    group.userData.shapeForExtrusion = shape; 
                     group.add(line);
 
                     scene.add(group);
                     objects.push(group);
-                    selectedObject = group;
+                    
+                    if (selectedObjects.length > 0) {
+                        clearAllHighlights();
+                        tControls.detach();
+                    }
+
+                    scene.add(group);
+                    objects.push(group);
+                    selectedObjects = [group];
                     tControls.attach(group);
                     updateUI();
                 } else {
@@ -650,25 +949,26 @@
 
 
 // --- ESCUCHA DE TECLADO (RECUPERADA) ---
-window.addEventListener('keydown', (e) => {
+    window.addEventListener('keydown', (e) => {
     // Esc para deseleccionar y volver a modo selección
     if(e.key === 'Escape') {
         setMode('SELECT');
-        if (selectedObject) {
-            clearSelectionHighlight();
+        if (selectedObjects.length > 0) {
+            clearAllHighlights();
             tControls.detach();
-            selectedObject = null;
+            selectedObjects = [];
             updateUI();
         }
     }
         
     // Suprimir o Backspace para borrar objeto
-    if((e.key === 'Delete' || e.key === 'Backspace') && selectedObject) {
-        clearSelectionHighlight(); // Limpiamos el recuadro y material antes de borrar
-        scene.remove(selectedObject);
-        objects = objects.filter(o => o !== selectedObject);
+    if((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) {
         tControls.detach();
-        selectedObject = null;
+        selectedObjects.forEach(obj => {
+            scene.remove(obj);
+            objects = objects.filter(o => o.uuid !== obj.uuid);
+        });
+        selectedObjects = [];
         updateUI();
     }
 
