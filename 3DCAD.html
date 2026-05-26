@@ -32,6 +32,7 @@
         .tool-btn.action { background: #4caf50; border: none; display: none; }
 
         #extrude-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        #scale-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
 
@@ -98,6 +99,12 @@
     <h4 style="margin:0 0 10px 0">Ajustar Extrusión</h4>
     Altura: <input type="number" id="ext-h" value="15" style="width:60px"> mm
     <button id="btn-do-extrude" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-left:10px">OK</button>
+</div>
+
+<div id="scale-modal">
+    <h4 style="margin:0 0 10px 0">Escalar Objeto</h4>
+    Tamaño máximo: <input type="number" id="scale-size" value="150" style="width:60px"> mm
+    <button id="btn-do-scale" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-left:10px">OK</button>
 </div>
 
 <div id="toolbar">
@@ -415,7 +422,18 @@
             alert("Por favor, selecciona un único objeto para escalar.");
             return;
         }
+        document.getElementById('scale-modal').style.display = 'block';
+    };
+
+    document.getElementById('btn-do-scale').onclick = () => {
+        if (selectedObjects.length !== 1) return;
         const selectedObject = selectedObjects[0];
+        const maxSize = parseFloat(document.getElementById('scale-size').value);
+        if (isNaN(maxSize) || maxSize <= 0) {
+            alert("Por favor, introduce un tamaño máximo válido y positivo.");
+            return;
+        }
+        
         // 1. Calcular el tamaño actual del objeto
         const box = new THREE.Box3().setFromObject(selectedObject);
         const size = new THREE.Vector3();
@@ -426,13 +444,14 @@
 
         if (maxDim > 0) {
             // 3. Calcular y aplicar el factor de escala
-            const scaleFactor = 150 / maxDim; 
+            const scaleFactor = maxSize / maxDim; 
             selectedObject.scale.multiplyScalar(scaleFactor);
             
             // Actualizamos los controles de transformación para que reflejen la nueva escala
             tControls.attach(selectedObject);
             
-            alert("Objeto escalado. Su dimensión máxima ahora es 150mm.");
+            alert(`Objeto escalado. Su dimensión máxima ahora es ${maxSize}mm.`);
+            document.getElementById('scale-modal').style.display = 'none';
         }
     };
 
@@ -1030,6 +1049,19 @@
     function globalKeyDownHandler(e) {
         // Esc para deseleccionar y volver a modo selección
         if (e.key === 'Escape') {
+            // Cerrar diálogos modales si están abiertos
+            const extrudeModal = document.getElementById('extrude-modal');
+            const scaleModal = document.getElementById('scale-modal');
+            
+            if (extrudeModal && extrudeModal.style.display === 'block') {
+                extrudeModal.style.display = 'none';
+                return; // No hacer nada más si se cierra un modal
+            }
+            if (scaleModal && scaleModal.style.display === 'block') {
+                scaleModal.style.display = 'none';
+                return; // No hacer nada más si se cierra un modal
+            }
+            
             setMode('SELECT');
             if (selectedObjects.length > 0) {
                 clearAllHighlights();
@@ -1096,6 +1128,27 @@
     extInput.addEventListener('blur', () => {
         window.addEventListener('keydown', globalKeyDownHandler);
         extInput.removeEventListener('keydown', handleInputKeydown);
+    });
+
+    // Desactivar atajos de teclado globales al entrar en el input de escala
+    const scaleInput = document.getElementById('scale-size');
+    const scaleModal = document.getElementById('scale-modal');
+
+    const handleScaleInputKeydown = (e) => {
+        if (e.key === 'Escape') {
+            scaleModal.style.display = 'none';
+            scaleInput.blur(); // Quita el foco del input para reactivar los atajos
+        }
+    };
+
+    scaleInput.addEventListener('focus', () => {
+        window.removeEventListener('keydown', globalKeyDownHandler);
+        scaleInput.addEventListener('keydown', handleScaleInputKeydown);
+    });
+
+    scaleInput.addEventListener('blur', () => {
+        window.addEventListener('keydown', globalKeyDownHandler);
+        scaleInput.removeEventListener('keydown', handleScaleInputKeydown);
     });
 </script>
 </body>
