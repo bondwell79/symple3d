@@ -285,7 +285,7 @@
                     selectedObjects = [target];
                 }
             } else {
-                selectedObjects = [];
+                //selectedObjects = [];
             }
             selectedObjects.forEach(applySelectionHighlight);
         }
@@ -1056,7 +1056,6 @@
         scene.add(tControls);
     };
 
-    // --- LÓGICA DE IMAGEN A 3D (NUEVA) ---
     document.getElementById('file-img').onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -1065,47 +1064,72 @@
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                const canvas = document.getElementById('img-processor');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                
-                // Procesar la imagen para encontrar contornos
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const contours = findContours(imageData);
+                // Notificar al usuario que el proceso ha comenzado
+                const hud = document.getElementById('selection-hud');
+                hud.innerText = "Procesando imagen...";
 
-                if (contours.length > 0) {
-                    // Por ahora, usamos el contorno más grande
-                    contours.sort((a, b) => b.length - a.length);
-                    const mainContour = contours[0];
+                // Usamos un setTimeout para permitir que la UI se actualice
+                // y muestre el mensaje "Procesando..." antes de empezar la tarea pesada.
+                setTimeout(() => {
+                    const canvas = document.getElementById('img-processor');
+                    const ctx = canvas.getContext('2d');
 
-                    // Convertir los puntos del contorno a un objeto de Three.js
-                    const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
-                    
-                    // Crear un croquis (como en el dibujo manual) para visualizarlo
-                    const group = new THREE.Group();
-                    group.userData.type = "SKETCH";
-                    const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
-                    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-                    // Para la extrusión, necesitamos una forma, no solo los puntos de la línea
-                    group.userData.shapeForExtrusion = shape; 
-                    group.add(line);
+                    // 1. Definimos una dimensión máxima para el análisis.
+                    const MAX_DIMENSION = 500; // 500px en el lado más largo.
+                    let newWidth = img.width;
+                    let newHeight = img.height;
 
-                    scene.add(group);
-                    objects.push(group);
-                    
-                    if (selectedObjects.length > 0) {
-                        clearAllHighlights();
-                        tControls.detach();
+                    // 2. Calculamos las nuevas dimensiones si la imagen es muy grande.
+                    if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+                        if (img.width > img.height) {
+                            newWidth = MAX_DIMENSION;
+                            newHeight = (img.height * MAX_DIMENSION) / img.width;
+                        } else {
+                            newHeight = MAX_DIMENSION;
+                            newWidth = (img.width * MAX_DIMENSION) / img.height;
+                        }
                     }
 
-                    selectedObjects = [group];
-                    tControls.attach(group);
-                    updateUI();
-                } else {
-                    alert("No se pudieron detectar formas en la imagen.");
-                }
+                    // 3. Redimensionamos el canvas y dibujamos la imagen escalada.
+                    canvas.width = newWidth;
+                    canvas.height = newHeight;
+                    ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+                    // 4. Procesamos la imagen (ahora mucho más pequeña).
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const contours = findContours(imageData);
+
+                    if (contours.length > 0) {
+                        contours.sort((a, b) => b.length - a.length);
+                        const mainContour = contours[0];
+
+                        // Convertimos los puntos del contorno a un objeto de Three.js.
+                        // El tamaño del objeto en la escena será proporcional al MAX_DIMENSION.
+                        const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
+                        
+                        const group = new THREE.Group();
+                        group.userData.type = "SKETCH";
+                        const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
+                        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                        group.userData.shapeForExtrusion = shape; 
+                        group.add(line);
+
+                        scene.add(group);
+                        objects.push(group);
+                        
+                        if (selectedObjects.length > 0) {
+                            clearAllHighlights();
+                            tControls.detach();
+                        }
+
+                        selectedObjects = [group];
+                        tControls.attach(group);
+                        updateUI();
+                    } else {
+                        alert("No se pudieron detectar formas en la imagen.");
+                        hud.innerText = "Sin selección"; // Restaurar HUD en caso de error
+                    }
+                }, 10); // 10ms de espera son suficientes para el refresco de la UI.
             };
             img.src = event.target.result;
         };
@@ -1114,83 +1138,78 @@
 
     // Función para detectar contornos (simplificada)
     function findContours(imageData) {
-        // Implementación para encontrar el contorno por contraste de luminosidad.
         const w = imageData.width;
         const h = imageData.height;
         const data = imageData.data;
-        const threshold = 128; // Umbral de luminosidad (0=negro, 255=blanco)
-        let visited = new Uint8Array(w * h);
         let contours = [];
 
-        const isSolid = (x, y) => {
-            if (x < 0 || x >= w || y < 0 || y >= h) return false;
+        // Esta función determina si un píxel NO es blanco ni transparente.
+        // Se considera "no blanco" si no es casi blanco y tiene suficiente opacidad.
+        const isblack = (x, y) => {
+            if (x < 0 || x >= w || y < 0 || y >= h) return false; 
             const idx = (y * w + x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            return brightness < threshold;
+            const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+            const blackThreshold = 240; 
+            return (r < blackThreshold && g < blackThreshold && b < blackThreshold);
         };
 
+        // Recorremos la imagen para encontrar los puntos de partida de los contornos.
+        let startPoint = { x: 0, y: 0 };
+        let startPointFound = false;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
-                if (visited[y * w + x]) continue;
+                                        if (isblack(x, y) && startPointFound === false) 
+                                            {
+                                            // encontrado el punto de partida
+                                            startPoint = { x, y };
+                                            startPointFound = true;
+                                            }
+                                        }
+                                    } 
 
-                if (isSolid(x, y) && (x === 0 || !isSolid(x - 1, y))) {
-                    // Es un borde izquierdo de una forma, un buen punto de partida.
-                    const startPoint = { x, y };
-                    let contour = traceContour(startPoint, data, w, h, threshold, visited);
-                    if (contour.length > 10) {
-                        contours.push(contour);
-                    }
-                }
-            }
-        }
+        let contour = traceContour(startPoint, isblack, w, h);  
+        contours.push(contour);
+
         return contours;
     }
 
-    function traceContour(start, data, w, h, threshold, visited) {
-        let path = [];
-        let curr = start;
-        let dir = 0; // 0:E, 1:N, 2:W, 3:S
+    function traceContour(startPoint, isblack, w, h) {
+        const path = [];
+        let currentPoint = startPoint;
 
-        const isSolid = (p) => {
-            if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
-            const idx = (p.y * w + p.x) * 4;
-            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-            return brightness < threshold;
+        const isalone = (x, y) => {
+            let resultado = false;
+            resultado = isblack(x, y) && (!isblack(x + 1, y) || !isblack(x - 1, y) || !isblack(x, y + 1) || !isblack(x, y - 1)); 
+            if (path.some(p => p.x === x && p.y === y)) { resultado = false; }
+            return resultado;
+        };
+        const movimiento = (x, y) => {
+            let mover = false;
+            let dx = x, dy = y
+            if (isalone(x+1,y) && !mover) { dx = x + 1; dy = y ; mover = true; }
+            else if (isalone(x+1,y+1) && !mover) { dx = x + 1; dy = y + 1 ; mover = true; }
+            else if (isalone(x,y+1) && !mover) { dx = x ; dy = y + 1; mover = true; }
+            else if (isalone(x-1,y+1) && !mover) { dx = x - 1; dy = y + 1; mover = true; }
+            else if (isalone(x-1,y) && !mover) { dx = x - 1; dy = y; mover = true; }
+            else if (isalone(x-1,y-1) && !mover) { dx = x - 1; dy = y - 1; mover = true; }
+            else if (isalone(x,y-1) && !mover) { dx = x ; dy = y - 1; mover = true; }
+            else if (isalone(x+1,y-1) && !mover) { dx = x + 1; dy = y - 1; mover = true; }
+            return {x: dx, y: dy};
         };
 
-        for (let i = 0; i < w * h; i++) { // Límite de seguridad
-            path.push(curr);
-            visited[curr.y * w + curr.x] = 1;
-
-            const neighbors = [
-                {x: 1, y: 0},  // 0: E
-                {x: 0, y: -1}, // 1: N
-                {x: -1, y: 0}, // 2: W
-                {x: 0, y: 1}   // 3: S
-            ];
-
-            // Gira a la izquierda desde la dirección de llegada para empezar a buscar.
-            // Esto implementa una búsqueda de "mano derecha" (mantiene la pared a la derecha).
-            let startDir = (dir + 1) % 4; 
-            let foundNext = false;
-
-            for (let j = 0; j < 4; j++) {
-                const checkDir = (startDir + 3 + j) % 4;
-                const move = neighbors[checkDir];
-                const next = { x: curr.x + move.x, y: curr.y + move.y };
-
-                if (isSolid(next)) {
-                    dir = checkDir; // Nueva dirección de movimiento
-                    curr = next;
-                    foundNext = true;
-                    break;
-                }
-            }
-
-            if (!foundNext || (curr.x === start.x && curr.y === start.y)) {
-                break; // Contorno completado o atascado
-            }
-        }
+        do 
+        {
+            const nextMove = movimiento(currentPoint.x, currentPoint.y);
+            if (nextMove.x !== currentPoint.x || nextMove.y !== currentPoint.y) 
+                {
+                currentPoint = nextMove;
+                path.push({ x: currentPoint.x, y: currentPoint.y });
+                } 
+                      
+        } while ((currentPoint.x !== startPoint.x || currentPoint.y !== startPoint.y) && path.length < 1000); // Evitar bucles infinitos
+        if (path.length > 0) { path.push({ x: startPoint.x, y: startPoint.y }); }
+                                                    
+        alert(`Contorno trazado con ${path.length} puntos.`);
         return path;
     }
 
