@@ -344,6 +344,25 @@
         updateSceneList();
     }
 
+    function deleteSelectedObjects() {
+        if (selectedObjects.length === 0) return;
+
+        tControls.detach();
+        const selectedUUIDs = new Set(selectedObjects.map(o => o.uuid));
+
+        selectedObjects.forEach(obj => {
+            removeSelectionHighlight(obj);
+            scene.remove(obj);
+        });
+
+        // Filtra el array principal de objetos una sola vez para mayor eficiencia
+        objects = objects.filter(o => !selectedUUIDs.has(o.uuid));
+        
+        // Limpia la selección
+        selectedObjects = [];
+        updateUI();
+    }
+
     function applySelectionHighlight(object) {
         if (!object) return;
         removeSelectionHighlight(object); // Evita duplicados
@@ -902,15 +921,7 @@
                 menu.style.top = `${e.clientY}px`;
 
                 document.getElementById('ctx-delete').onclick = () => {
-                    const objectToDelete = objects.find(o => o.uuid === obj.uuid);
-                    if (objectToDelete) {
-                        tControls.detach();
-                        removeSelectionHighlight(objectToDelete);
-                        scene.remove(objectToDelete);
-                        objects = objects.filter(o => o !== objectToDelete);
-                        selectedObjects = selectedObjects.filter(o => o.uuid !== objectToDelete.uuid);
-                        updateUI();
-                    }
+                    deleteSelectedObjects();
                     menu.style.display = 'none';
                 };
             });
@@ -975,14 +986,7 @@
             
             // Re-asigna la función de borrado para el objeto actual
             document.getElementById('ctx-delete').onclick = () => {
-                if (target) {
-                    tControls.detach();
-                    removeSelectionHighlight(target); 
-                    scene.remove(target);
-                    objects = objects.filter(o => o.uuid !== target.uuid);
-                    selectedObjects = selectedObjects.filter(o => o.uuid !== target.uuid);
-                    updateUI();
-                }
+                deleteSelectedObjects();
                 menu.style.display = 'none';
             };
         }
@@ -1276,14 +1280,7 @@
                     return; 
                     }
 
-            tControls.detach();
-            selectedObjects.forEach(obj => {
-                removeSelectionHighlight(obj); 
-                scene.remove(obj);
-                objects = objects.filter(o => o.uuid !== obj.uuid);
-            });
-            selectedObjects = [];
-            updateUI();
+            deleteSelectedObjects();
             }
 
         // Atajos de Transformación
