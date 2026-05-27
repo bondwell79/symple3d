@@ -787,7 +787,7 @@
         objects.push(group);
         sketchGroup.clear();
         points = [];
-        
+
         setMode('SELECT');
         clearAllHighlights();
         selectedObjects = [group];
@@ -905,6 +905,7 @@
                     const objectToDelete = objects.find(o => o.uuid === obj.uuid);
                     if (objectToDelete) {
                         tControls.detach();
+                        removeSelectionHighlight(objectToDelete);
                         scene.remove(objectToDelete);
                         objects = objects.filter(o => o !== objectToDelete);
                         selectedObjects = selectedObjects.filter(o => o.uuid !== objectToDelete.uuid);
