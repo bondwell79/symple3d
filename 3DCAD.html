@@ -56,17 +56,21 @@
     <div class="menu-item">Archivo
         <div class="dropdown">
             <div class="drop-opt" onclick="document.getElementById('file-stl').click()">Importar STL</div>
-            <div class="drop-opt" onclick="document.getElementById('file-img').click()">Imagen a 3D (Extruir)</div>
             <div class="drop-opt" id="btn-export">Exportar Proyecto (STL)</div>
             <div class="drop-opt" onclick="window.location.reload()">Nuevo</div>
         </div>
     </div>
     <div class="menu-item">Herramientas
         <div class="dropdown">
-            <div class="drop-opt" id="mod-center">Centrar en Cama (0,0,0)</div>
-            <div class="drop-opt" id="mod-scale">Escalar (Fit)</div>
-            <div class="drop-opt" id="mod-ground">Apoyar en el Suelo (Z=0)</div>
-            <div class="drop-opt" id="mod-merge">Fusionar</div>
+            <div class="drop-opt" onclick="document.getElementById('file-img').click()">Generar croquis desde imagen</div>
+        </div>
+    </div>
+    <div class="menu-item">Modificar
+        <div class="dropdown">
+            <div class="drop-opt" id="mod-center">Centrar en Cama</div>
+            <div class="drop-opt" id="mod-scale">Escalar</div>
+            <div class="drop-opt" id="mod-ground">Apoyar en el Suelo</div>
+            <div class="drop-opt" id="mod-merge">Fusionar MESH</div>
             <div class="drop-opt" id="mod-flip">Reparar figura</div>
         </div>
     </div>
@@ -538,7 +542,7 @@
             const group = new THREE.Group();
             group.userData.type = "SKETCH";
             group.userData.isTextSketch = true;
-            group.userData.textShapes = shapes; // Guardamos las formas para extrusión posterior
+            group.userData.shapesForExtrusion = shapes; // Guardamos las formas para extrusión posterior
 
             shapes.forEach(shape => {
                 const points = shape.getPoints();
@@ -567,19 +571,21 @@
     document.getElementById('mod-plane').onclick = () => {
         const width = 100;
         const height = 60;
-
-        const points = [
-            new THREE.Vector3(-width / 2, -height / 2, 0),
-            new THREE.Vector3(width / 2, -height / 2, 0),
-            new THREE.Vector3(width / 2, height / 2, 0),
-            new THREE.Vector3(-width / 2, height / 2, 0)
-        ];
+        const shape = new THREE.Shape([
+            new THREE.Vector2(-width / 2, -height / 2),
+            new THREE.Vector2(width / 2, -height / 2),
+            new THREE.Vector2(width / 2, height / 2),
+            new THREE.Vector2(-width / 2, height / 2)
+        ]);
 
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
-        group.userData.points = points; 
+        // Formato unificado:
+        group.userData.shapesForExtrusion = [shape]; 
 
+        const points = shape.getPoints();
         const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
+    
         const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
         group.add(line);
         
@@ -599,12 +605,13 @@
         shape.arc(0, 0, radius, 0, 2 * Math.PI, false);
         shape.closePath();
 
-        const points = shape.getPoints(50); // 50 segmentos para suavidad
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
         
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
-        group.userData.shapeForExtrusion = shape; 
+        // Formato unificado:
+        group.userData.shapesForExtrusion = [shape]; 
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints(50));
 
         const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
         group.add(line);
@@ -645,40 +652,43 @@
             alert("Por favor, introduce una altura de extrusión válida y positiva.");
             return;
         }
-        let geometry;
 
-        if (selectedObject.userData.isTextSketch) {
-            // Extruir desde las formas del texto
-            geometry = new THREE.ExtrudeGeometry(selectedObject.userData.textShapes, { depth: h, bevelEnabled: false });
-            geometry.center(); // Centramos la geometría para alinear su pivote en X e Y.
-            geometry.translate(0, 0, h / 2); // La subimos en Z para que su base quede en Z=0.
-        } else if (selectedObject.userData.points) {
-            // Extruir desde dibujo manual o rectángulo
-            const shape = new THREE.Shape(selectedObject.userData.points.map(p => new THREE.Vector2(p.x, p.y)));
-            geometry = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-        } else if (selectedObject.userData.shapeForExtrusion) {
-            // Extruir desde círculo
-            geometry = new THREE.ExtrudeGeometry(selectedObject.userData.shapeForExtrusion, { depth: h, bevelEnabled: false });
+        if (!selectedObject.userData.shapesForExtrusion || selectedObject.userData.shapesForExtrusion.length === 0) {
+        alert("El objeto seleccionado no es un croquis válido para extrusión.");
+        return;
         }
+        const transformMatrix = new THREE.Matrix4().compose(
+        new THREE.Vector3(),       // Ignoramos la posición
+        selectedObject.quaternion, // Usamos la rotación
+        selectedObject.scale       // Usamos la escala
+        );
 
-        if (geometry) {
-            const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x555555 }));
-            mesh.userData.type = "MESH";
-            mesh.position.copy(selectedObject.position);
-            mesh.rotation.copy(selectedObject.rotation);
-            mesh.scale.copy(selectedObject.scale);
-            scene.add(mesh);
-            objects.push(mesh);
-            scene.remove(selectedObject);
-            objects = objects.filter(o => o !== selectedObject);
-            
-            selectedObjects = [mesh];
-            applySelectionHighlight(mesh);
-            tControls.attach(mesh);
-            document.getElementById('extrude-modal').style.display = 'none';
-            updateUI();
-        }
-    };
+        const originalShapes = selectedObject.userData.shapesForExtrusion;
+        const transformedShapes = originalShapes.map(shape => {
+        const points = shape.getPoints();
+        const transformedPoints = points.map(p => {
+            const vec3 = new THREE.Vector3(p.x, p.y, 0).applyMatrix4(transformMatrix);
+            return new THREE.Vector2(vec3.x, vec3.y);
+        });
+        return new THREE.Shape(transformedPoints);
+        });
+
+        const geometry = new THREE.ExtrudeGeometry(transformedShapes, { depth: h, bevelEnabled: false });
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x555555 }));
+        mesh.userData.type = "MESH";
+        mesh.position.copy(selectedObject.position); 
+
+        scene.add(mesh);
+        objects.push(mesh);
+        scene.remove(selectedObject);
+        objects = objects.filter(o => o !== selectedObject);
+        
+        selectedObjects = [mesh];
+        applySelectionHighlight(mesh);
+        tControls.attach(mesh);
+        document.getElementById('extrude-modal').style.display = 'none';
+        updateUI();
+        };
 
     // --- RESTO DE FUNCIONES (SINFÍN DE CAMBIOS) ---
     document.getElementById('mod-ground').onclick = () => {
@@ -739,9 +749,11 @@
     });
 
     function finalizeSketch() {
+        const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
-        group.userData.points = [...points];
+        // Formato unificado:
+        group.userData.shapesForExtrusion = [shape];
         const geo = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
         group.add(new THREE.Line(geo, new THREE.LineBasicMaterial({color: 0x00d2ff, linewidth: 2})));
         scene.add(group);
@@ -784,6 +796,7 @@
     }
     
     animate();
+    updateUI();
 
     function updateSceneList() {
         const listContainer = document.getElementById('scene-object-list');
@@ -976,39 +989,6 @@
         document.getElementById('position-modal').style.display = 'none';
         updateUI(); 
     };
-
-    window.addEventListener('keydown', (e) => {
-        const anyModalOpen = document.querySelector('#extrude-modal, #scale-modal, #text-modal, #position-modal').style.display === 'block';
-        if (anyModalOpen) {
-        return;
-        }
-        // Ignorar si se está escribiendo en un input
-        if (document.activeElement.tagName === 'INPUT') return;
-
-        if (e.key.toLowerCase() === 'p') {
-            openPositionModal();
-        }
-
-        if (e.key === "Escape") {
-            // Primero, cerrar cualquier modal abierto
-            const modals = document.querySelectorAll('#extrude-modal, #scale-modal, #text-modal, #position-modal');
-            let aModalWasOpen = false;
-            modals.forEach(modal => {
-                if (modal.style.display === 'block') {
-                    modal.style.display = 'none';
-                    aModalWasOpen = true;
-                }
-            });
-
-            // Si no había ningún modal abierto, deseleccionar objetos
-            if (!aModalWasOpen && selectedObjects.length > 0) {
-                clearAllHighlights();
-                selectedObjects = [];
-                tControls.detach();
-                updateUI();
-            }
-        }
-    });
 
     window.onresize = () => {
         const aspect = window.innerWidth / window.innerHeight;
@@ -1215,50 +1195,54 @@
 
 
 // --- ESCUCHA DE TECLADO (MEJORADA) ---
-    function globalKeyDownHandler(e) {
-        // La nueva condición que propones:
-        const anyModalOpen = document.querySelector('#extrude-modal, #scale-modal, #text-modal, #position-modal').style.display === 'block';
+    function globalKeyDownHandler(e) 
+        {
         
-        // Si algún modal está abierto, la función no hace nada más.
-        if (anyModalOpen) {
-            return; 
-        }
+        const extrudeModal = document.getElementById('extrude-modal');
+        const scaleModal = document.getElementById('scale-modal');
+        const textModal = document.getElementById('text-modal');
+        const positionModal = document.getElementById('position-modal');
+
+        
         // Esc para deseleccionar y volver a modo selección
         if (e.key === 'Escape') {
-            // Cerrar diálogos modales si están abiertos
-            const extrudeModal = document.getElementById('extrude-modal');
-            const scaleModal = document.getElementById('scale-modal');
-            const textModal = document.getElementById('text-modal');
-            const positionModal = document.getElementById('position-modal');
-            
-            if (extrudeModal && extrudeModal.style.display === 'block') {
+
+        // Si algún modal está abierto, lo cerramos y salimos sin cambiar la selección
+        if (extrudeModal && extrudeModal.style.display === 'block' ||
+            scaleModal && scaleModal.style.display === 'block' ||
+            textModal && textModal.style.display === 'block' ||
+            positionModal && positionModal.style.display === 'block') 
+                {
                 extrudeModal.style.display = 'none';
-                return; // No hacer nada más si se cierra un modal
-            }
-            if (scaleModal && scaleModal.style.display === 'block') {
                 scaleModal.style.display = 'none';
-                return; // No hacer nada más si se cierra un modal
-            }
-            if (textModal && textModal.style.display === 'block') {
                 textModal.style.display = 'none';
-                return;
-            }
-            if (positionModal && positionModal.style.display === 'block') {
                 positionModal.style.display = 'none';
-                return;
-            }
-            
-            setMode('SELECT');
-            if (selectedObjects.length > 0) {
-                clearAllHighlights();
-                tControls.detach();
-                selectedObjects = [];
-                updateUI();
-            }
+                return; 
+                }
+        
+        // si no hay modales abiertos, entonces deseleccionamos y volvemos a modo selección
+        setMode('SELECT');
+        if (selectedObjects.length > 0) {
+            clearAllHighlights();
+            tControls.detach();
+            selectedObjects = [];
+            updateUI();
+        }
         }
         
         // Suprimir o Backspace para borrar objeto
-        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) 
+            {
+
+            // Si hay algún modal abierto, lo cerramos y salimos sin borrar nada
+            if (extrudeModal && extrudeModal.style.display === 'block' ||
+                scaleModal && scaleModal.style.display === 'block' ||
+                textModal && textModal.style.display === 'block' ||
+                positionModal && positionModal.style.display === 'block') 
+                    {
+                    return; 
+                    }
+
             tControls.detach();
             selectedObjects.forEach(obj => {
                 removeSelectionHighlight(obj); 
@@ -1267,13 +1251,13 @@
             });
             selectedObjects = [];
             updateUI();
-        }
+            }
 
         // Atajos de Transformación
         if (e.key.toLowerCase() === 'w') tControls.setMode('translate'); // Mover
         if (e.key.toLowerCase() === 'e') tControls.setMode('rotate');    // Rotar
         if (e.key.toLowerCase() === 'r') tControls.setMode('scale');     // Escalar
-
+        if (e.key.toLowerCase() === 'p') openPositionModal();
         
         if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
             const orbitStep = 0.1;
