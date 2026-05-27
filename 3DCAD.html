@@ -35,6 +35,12 @@
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
 
+        #position-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        #position-modal h4 { margin: 0 0 15px 0; }
+        #position-modal label { display: inline-block; width: 30px; }
+        #position-modal input { width: 80px; margin-bottom: 10px; }
+        #position-modal button { background: var(--accent); border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; }
+
         .scene-obj { padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .scene-obj:hover { background: #094771; }
         .scene-obj.selected { background: var(--accent); color: black; font-weight: bold; }
@@ -129,11 +135,26 @@
     <button class="tool-btn action" id="btn-open-extrude" >EXTRUIR SELECCIÓN</button>
 </div>
 
+<div id="position-modal">
+    <h4>Modificar Posición</h4>
+    <div>
+        <label for="pos-x">X:</label> <input type="number" id="pos-x" step="0.1"> mm
+    </div>
+    <div>
+        <label for="pos-y">Y:</label> <input type="number" id="pos-y" step="0.1"> mm
+    </div>
+    <div>
+        <label for="pos-z">Z:</label> <input type="number" id="pos-z" step="0.1"> mm
+    </div>
+    <button id="btn-do-position">Aplicar</button>
+</div>
+
 <footer>
     <div class="status-part">
         <span>MODO: <b id="st-mode">SELECCIÓN</b></span>
         <span>OBJETO: <b id="st-obj">NINGUNO</b></span>
         <span id="st-size-info" style="display:none;">DIM: <b id="st-size"></b></span>
+        <span id="st-pos-info" style="display:none;">POS: <b id="st-pos"></b></span>
     </div>
     <div class="status-part">
         <span>X: <span class="coord-val" id="st-x">0.00</span> mm</span>
@@ -145,6 +166,7 @@
     <div id="ctx-move">Mover</div>
     <div id="ctx-rotate">Rotar</div>
     <div id="ctx-scale">Escalar</div>
+    <div id="ctx-position">Posición (X/Y/Z)</div>
     <div id="ctx-delete">Eliminar</div>
 </div>
 
@@ -193,6 +215,7 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     const tControls = new TransformControls(camera, renderer.domElement);
     scene.add(tControls);
+    tControls.addEventListener('objectChange', updateUI);
     tControls.addEventListener('dragging-changed', (e) => controls.enabled = !e.value);
 
     const grid = new THREE.GridHelper(200, 20, 0x444444, 0x222222);
@@ -281,12 +304,15 @@
         const stObj = document.getElementById('st-obj');
         const sizeInfo = document.getElementById('st-size-info');
         const sizeVal = document.getElementById('st-size');
+        const posInfo = document.getElementById('st-pos-info');
+        const posVal = document.getElementById('st-pos');
         
         if (selectedObjects.length === 0) {
             hud.innerText = "Sin selección";
             stObj.innerText = "NINGUNO";
             extBtn.style.display = 'none';
             sizeInfo.style.display = 'none';
+            posInfo.style.display = 'none';
         } else if (selectedObjects.length === 1) {
             const selectedObject = selectedObjects[0];
             const type = selectedObject.userData.type || "Objeto";
@@ -300,11 +326,16 @@
             sizeVal.innerText = `X:${size.x.toFixed(1)} Y:${size.y.toFixed(1)} Z:${size.z.toFixed(1)} mm`;
             sizeInfo.style.display = 'inline';
 
+            const pos = selectedObject.position;
+            posVal.innerText = `X:${pos.x.toFixed(1)} Y:${pos.y.toFixed(1)} Z:${pos.z.toFixed(1)}`;
+            posInfo.style.display = 'inline';
+
         } else {
             hud.innerText = `${selectedObjects.length} objetos seleccionados`;
             stObj.innerText = "MÚLTIPLES";
             extBtn.style.display = 'none';
             sizeInfo.style.display = 'none';
+            posInfo.style.display = 'none';
         }
         updateSceneList();
     }
@@ -861,6 +892,10 @@
         if (selectedObjects.length > 0) tControls.setMode('scale');
         document.getElementById('context-menu').style.display = 'none';
     };
+     document.getElementById('ctx-position').onclick = () => {
+        openPositionModal();
+        document.getElementById('context-menu').style.display = 'none';
+    };
 
     renderer.domElement.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -905,6 +940,73 @@
                 }
                 menu.style.display = 'none';
             };
+        }
+    });
+
+    // --- DIÁLOGO DE POSICIÓN ---
+    function openPositionModal() {
+        if (selectedObjects.length !== 1) {
+            alert("Por favor, selecciona un único objeto para modificar su posición.");
+            return;
+        }
+        const selectedObject = selectedObjects[0];
+        document.getElementById('pos-x').value = selectedObject.position.x.toFixed(2);
+        document.getElementById('pos-y').value = selectedObject.position.y.toFixed(2);
+        document.getElementById('pos-z').value = selectedObject.position.z.toFixed(2);
+        document.getElementById('position-modal').style.display = 'block';
+    }
+
+    document.getElementById('btn-do-position').onclick = () => {
+        if (selectedObjects.length !== 1) return;
+        const selectedObject = selectedObjects[0];
+        
+        const newX = parseFloat(document.getElementById('pos-x').value);
+        const newY = parseFloat(document.getElementById('pos-y').value);
+        const newZ = parseFloat(document.getElementById('pos-z').value);
+
+        if (isNaN(newX) || isNaN(newY) || isNaN(newZ)) {
+            alert("Por favor, introduce valores numéricos válidos para X, Y y Z.");
+            return;
+        }
+
+        selectedObject.position.x = newX;
+        selectedObject.position.y = newY;
+        selectedObject.position.z = newZ;
+
+        document.getElementById('position-modal').style.display = 'none';
+        updateUI(); 
+    };
+
+    window.addEventListener('keydown', (e) => {
+        const anyModalOpen = document.querySelector('#extrude-modal, #scale-modal, #text-modal, #position-modal').style.display === 'block';
+        if (anyModalOpen) {
+        return;
+        }
+        // Ignorar si se está escribiendo en un input
+        if (document.activeElement.tagName === 'INPUT') return;
+
+        if (e.key.toLowerCase() === 'p') {
+            openPositionModal();
+        }
+
+        if (e.key === "Escape") {
+            // Primero, cerrar cualquier modal abierto
+            const modals = document.querySelectorAll('#extrude-modal, #scale-modal, #text-modal, #position-modal');
+            let aModalWasOpen = false;
+            modals.forEach(modal => {
+                if (modal.style.display === 'block') {
+                    modal.style.display = 'none';
+                    aModalWasOpen = true;
+                }
+            });
+
+            // Si no había ningún modal abierto, deseleccionar objetos
+            if (!aModalWasOpen && selectedObjects.length > 0) {
+                clearAllHighlights();
+                selectedObjects = [];
+                tControls.detach();
+                updateUI();
+            }
         }
     });
 
@@ -1013,7 +1115,6 @@
     // Función para detectar contornos (simplificada)
     function findContours(imageData) {
         // Implementación para encontrar el contorno por contraste de luminosidad.
-        // Asume que el objeto es más oscuro que el fondo.
         const w = imageData.width;
         const h = imageData.height;
         const data = imageData.data;
@@ -1021,22 +1122,23 @@
         let visited = new Uint8Array(w * h);
         let contours = [];
 
-        for (let y = 0; y < h - 1; y++) {
-            for (let x = 0; x < w - 1; x++) {
-                const idx = (y * w + x);
-                if (visited[idx]) continue;
-                
-                const r = data[idx * 4];
-                const g = data[idx * 4 + 1];
-                const b = data[idx * 4 + 2];
-                const brightness = (r + g + b) / 3;
+        const isSolid = (x, y) => {
+            if (x < 0 || x >= w || y < 0 || y >= h) return false;
+            const idx = (y * w + x) * 4;
+            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+            return brightness < threshold;
+        };
 
-                // Buscamos píxeles oscuros (por debajo del umbral) para iniciar el trazado
-                if (brightness < threshold) {
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                if (visited[y * w + x]) continue;
+
+                if (isSolid(x, y) && (x === 0 || !isSolid(x - 1, y))) {
+                    // Es un borde izquierdo de una forma, un buen punto de partida.
                     const startPoint = { x, y };
                     let contour = traceContour(startPoint, data, w, h, threshold, visited);
-                    if (contour.length > 10) { // Filtrar contornos muy pequeños
-                         contours.push(contour);
+                    if (contour.length > 10) {
+                        contours.push(contour);
                     }
                 }
             }
@@ -1051,43 +1153,42 @@
 
         const isSolid = (p) => {
             if (p.x < 0 || p.x >= w || p.y < 0 || p.y >= h) return false;
-            
-            const idx = (p.y * w + p.x);
-            const r = data[idx * 4];
-            const g = data[idx * 4 + 1];
-            const b = data[idx * 4 + 2];
-            const brightness = (r + g + b) / 3;
-
-            // Un píxel es "sólido" si es más oscuro que el umbral
+            const idx = (p.y * w + p.x) * 4;
+            const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
             return brightness < threshold;
         };
 
-        for(let i=0; i<w*h; i++) { // Límite para evitar bucles infinitos
+        for (let i = 0; i < w * h; i++) { // Límite de seguridad
             path.push(curr);
             visited[curr.y * w + curr.x] = 1;
 
             const neighbors = [
-                {x: curr.x + 1, y: curr.y}, // E
-                {x: curr.x, y: curr.y - 1}, // N
-                {x: curr.x - 1, y: curr.y}, // W
-                {x: curr.x, y: curr.y + 1}  // S
+                {x: 1, y: 0},  // 0: E
+                {x: 0, y: -1}, // 1: N
+                {x: -1, y: 0}, // 2: W
+                {x: 0, y: 1}   // 3: S
             ];
-            
+
+            // Gira a la izquierda desde la dirección de llegada para empezar a buscar.
+            // Esto implementa una búsqueda de "mano derecha" (mantiene la pared a la derecha).
+            let startDir = (dir + 1) % 4; 
             let foundNext = false;
-            for(let j=0; j<4; j++) {
-                const checkDir = (dir + j + 3) % 4; // Empezar a buscar desde la izquierda
-                const next = neighbors[checkDir];
-                
+
+            for (let j = 0; j < 4; j++) {
+                const checkDir = (startDir + 3 + j) % 4;
+                const move = neighbors[checkDir];
+                const next = { x: curr.x + move.x, y: curr.y + move.y };
+
                 if (isSolid(next)) {
+                    dir = checkDir; // Nueva dirección de movimiento
                     curr = next;
-                    dir = checkDir;
                     foundNext = true;
                     break;
                 }
             }
 
             if (!foundNext || (curr.x === start.x && curr.y === start.y)) {
-                break; // Terminamos el contorno
+                break; // Contorno completado o atascado
             }
         }
         return path;
