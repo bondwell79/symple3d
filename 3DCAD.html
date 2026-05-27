@@ -1197,12 +1197,20 @@
 
 // --- ESCUCHA DE TECLADO (MEJORADA) ---
     function globalKeyDownHandler(e) {
+        // La nueva condición que propones:
+        const anyModalOpen = document.querySelector('#extrude-modal, #scale-modal, #text-modal, #position-modal').style.display === 'block';
+        
+        // Si algún modal está abierto, la función no hace nada más.
+        if (anyModalOpen) {
+            return; 
+        }
         // Esc para deseleccionar y volver a modo selección
         if (e.key === 'Escape') {
             // Cerrar diálogos modales si están abiertos
             const extrudeModal = document.getElementById('extrude-modal');
             const scaleModal = document.getElementById('scale-modal');
             const textModal = document.getElementById('text-modal');
+            const positionModal = document.getElementById('position-modal');
             
             if (extrudeModal && extrudeModal.style.display === 'block') {
                 extrudeModal.style.display = 'none';
@@ -1214,6 +1222,10 @@
             }
             if (textModal && textModal.style.display === 'block') {
                 textModal.style.display = 'none';
+                return;
+            }
+            if (positionModal && positionModal.style.display === 'block') {
+                positionModal.style.display = 'none';
                 return;
             }
             
@@ -1264,70 +1276,6 @@
     }
     window.addEventListener('keydown', globalKeyDownHandler);
 
-    // Desactivar atajos de teclado globales al entrar en el input de extrusión
-    const extInput = document.getElementById('ext-h');
-    const extModal = document.getElementById('extrude-modal');
-
-    const handleInputKeydown = (e) => {
-        if (e.key === 'Escape') {
-            extModal.style.display = 'none';
-            extInput.blur(); // Quita el foco del input para reactivar los atajos
-        }
-    };
-
-    extInput.addEventListener('focus', () => {
-        window.removeEventListener('keydown', globalKeyDownHandler);
-        extInput.addEventListener('keydown', handleInputKeydown);
-    });
-
-    extInput.addEventListener('blur', () => {
-        window.addEventListener('keydown', globalKeyDownHandler);
-        extInput.removeEventListener('keydown', handleInputKeydown);
-    });
-
-    // Desactivar atajos de teclado globales al entrar en el input de escala
-    const scaleInput = document.getElementById('scale-size');
-    const scaleModal = document.getElementById('scale-modal');
-
-    const handleScaleInputKeydown = (e) => {
-        if (e.key === 'Escape') {
-            scaleModal.style.display = 'none';
-            scaleInput.blur(); // Quita el foco del input para reactivar los atajos
-        }
-    };
-
-    scaleInput.addEventListener('focus', () => {
-        window.removeEventListener('keydown', globalKeyDownHandler);
-        scaleInput.addEventListener('keydown', handleScaleInputKeydown);
-    });
-
-    scaleInput.addEventListener('blur', () => {
-        window.addEventListener('keydown', globalKeyDownHandler);
-        scaleInput.removeEventListener('keydown', handleScaleInputKeydown);
-    });
-
-    // Desactivar atajos de teclado globales al entrar en el input de texto
-    const textInput = document.getElementById('text-input');
-    const textModal = document.getElementById('text-modal');
-
-    const handleTextInputKeydown = (e) => {
-        if (e.key === 'Enter') {
-            document.getElementById('btn-do-add-text').click();
-        } else if (e.key === 'Escape') {
-            textModal.style.display = 'none';
-            textInput.blur();
-        }
-    };
-
-    textInput.addEventListener('focus', () => {
-        window.removeEventListener('keydown', globalKeyDownHandler);
-        textInput.addEventListener('keydown', handleTextInputKeydown);
-    });
-
-    textInput.addEventListener('blur', () => {
-        window.addEventListener('keydown', globalKeyDownHandler);
-        textInput.removeEventListener('keydown', handleTextInputKeydown);
-    });
 </script>
 </body>
 </html>
