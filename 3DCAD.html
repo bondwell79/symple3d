@@ -712,6 +712,8 @@
         const geometry = new THREE.ExtrudeGeometry(transformedShapes, { depth: h, bevelEnabled: false });
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: 0x555555 }));
         mesh.userData.type = "MESH";
+        
+        recenterPivot(mesh);
         mesh.position.copy(selectedObject.position); 
 
         scene.add(mesh);
