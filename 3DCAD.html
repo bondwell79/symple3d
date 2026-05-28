@@ -1152,6 +1152,7 @@
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
+        e.target.value = ''; // Resetear el input para permitir cargar la misma imagen nuevamente si se desea.
     };
 
     // Función para detectar contornos (simplificada)
