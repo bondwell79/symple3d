@@ -63,24 +63,25 @@
     <div class="menu-item">Herramientas
         <div class="dropdown">
             <div class="drop-opt" onclick="document.getElementById('file-img').click()">Generar croquis desde imagen</div>
+            <div class="drop-opt" id="mod-merge">Fusionar MESH</div>
+            <div class="drop-opt" id="mod-flip">Reparar figura</div>
+            <div class="drop-opt" id="mod-decimate">Reducir número de polígonos</div>
         </div>
     </div>
     <div class="menu-item">Modificar
         <div class="dropdown">
             <div class="drop-opt" id="mod-center">Centrar en Cama</div>
-            <div class="drop-opt" id="mod-scale">Escalar</div>
+            <div class="drop-opt" id="mod-scale">Escalado a dimesión máxima</div>
             <div class="drop-opt" id="mod-ground">Apoyar en el Suelo</div>
-            <div class="drop-opt" id="mod-merge">Fusionar MESH</div>
-            <div class="drop-opt" id="mod-flip">Reparar figura</div>
         </div>
     </div>
     <div class="menu-item">Objetos
         <div class="dropdown">
             <div class="drop-opt" id="mod-text">Añadir Texto (croquis)</div>
-            <div class="drop-opt" id="btn-mode-draw">Dibujar a Mano Alzada (croquis)</div>
+            <div class="drop-opt" id="btn-mode-draw">Dibujar (croquis)</div>
             <div class="drop-opt" id="mod-plane">Añadir Rectángulo (croquis)</div>
             <div class="drop-opt" id="mod-circulo">Añadir Círculo (croquis)</div>
-            <div class="drop-opt" id="mod-sphere">Añadir Esfera</div>
+            <div class="drop-opt" id="mod-sphere">Añadir Esfera (mesh)</div>
         </div>
     </div>
     <div class="menu-item">Escena
@@ -170,7 +171,7 @@
     <div id="ctx-move">Mover</div>
     <div id="ctx-rotate">Rotar</div>
     <div id="ctx-scale">Escalar</div>
-    <div id="ctx-position">Posición (X/Y/Z)</div>
+    <div id="ctx-position">Posición</div>
     <div id="ctx-delete">Eliminar</div>
 </div>
 
@@ -196,6 +197,7 @@
     import { STLLoader } from 'three/addons/loaders/STLLoader.js';
     import { FontLoader } from 'three/addons/loaders/FontLoader.js';
     import { CSG } from 'three-csg-ts';
+    import { SimplifyModifier } from 'three/addons/modifiers/SimplifyModifier.js';
 
     // --- ESCENA ---
     const scene = new THREE.Scene();
@@ -465,6 +467,72 @@
         tControls.attach(finalMesh);
         updateUI();
     };
+
+    document.getElementById('mod-decimate').onclick = () => {
+    // Verificar que haya mallas seleccionadas
+    const selectedMeshes = selectedObjects.filter(o => o.isMesh);
+    if (selectedMeshes.length === 0) {
+        alert("Por favor, selecciona al menos una malla 3D para simplificar.");
+        return;
+    }
+    const ratio = 0.5;
+    decimateMeshes(ratio);
+    };
+
+    /**
+     * Simplifica la geometría de las mallas seleccionadas a un ratio específico.
+     * @param {number} ratio - El porcentaje de caras a mantener (ej: 0.5 para 50%).
+     */
+    function decimateMeshes(ratio) 
+    {
+        const modifier = new SimplifyModifier();
+        const meshesToSimplify = selectedObjects.filter(o => o.isMesh);
+        const newSelectedObjects = [];
+
+        // Deseleccionar temporalmente para evitar problemas
+        tControls.detach();
+        clearAllHighlights();
+
+        meshesToSimplify.forEach(mesh => {
+            const originalGeometry = mesh.geometry;
+            
+            // El modificador funciona con el número de vértices.
+            // Lo calculamos a partir de la geometría original.
+            const targetCount = Math.floor(originalGeometry.attributes.position.count * ratio);
+            
+            console.log(`Simplificando malla de ${originalGeometry.attributes.position.count} a ${targetCount} vértices.`);
+
+            // El modificador crea y devuelve una nueva geometría simplificada
+            const simplifiedGeometry = modifier.modify(originalGeometry, targetCount);
+
+            // Crear una nueva malla con la geometría simplificada
+            const newMesh = new THREE.Mesh(simplifiedGeometry, mesh.material.clone());
+            newMesh.userData.type = "MESH";
+            
+            // Copiar la posición, rotación y escala del objeto original
+            newMesh.position.copy(mesh.position);
+            newMesh.rotation.copy(mesh.rotation);
+            newMesh.scale.copy(mesh.scale);
+
+            // Reemplazar el objeto antiguo por el nuevo
+            scene.remove(mesh);
+            objects = objects.filter(o => o !== mesh); // Eliminar del array de objetos
+            
+            scene.add(newMesh);
+            objects.push(newMesh);
+            newSelectedObjects.push(newMesh); // Añadir a la lista para la nueva selección
+        });
+
+        // Actualizar la selección y la interfaz de usuario
+        selectedObjects = newSelectedObjects;
+        selectedObjects.forEach(applySelectionHighlight);
+        if (selectedObjects.length === 1) {
+            tControls.attach(selectedObjects[0]);
+        }
+        updateUI();
+
+        alert(`Proceso completado. La(s) figura(s) ha(n) sido reducida(s) al ${ratio * 100}% de polígonos.`);
+    }
     
     document.getElementById('mod-flip').onclick = () => {
         if (selectedObjects.length !== 1 || !selectedObjects[0].isMesh) {
@@ -735,7 +803,7 @@
             const box = new THREE.Box3().setFromObject(selectedObject);
             const size = new THREE.Vector3();
             box.getSize(size);
-            selectedObject.position.z = 0; //size.z / 2
+            selectedObject.position.z = size.z / 2; 
         });
     };
 
