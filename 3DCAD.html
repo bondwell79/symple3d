@@ -1122,8 +1122,6 @@
                         contours.sort((a, b) => b.length - a.length);
                         const mainContour = contours[0];
 
-                        // Convertimos los puntos del contorno a un objeto de Three.js.
-                        // El tamaño del objeto en la escena será proporcional al MAX_DIMENSION.
                         const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
                         shape.closePath();
                         
