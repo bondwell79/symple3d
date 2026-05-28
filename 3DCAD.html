@@ -1125,12 +1125,13 @@
                         // Convertimos los puntos del contorno a un objeto de Three.js.
                         // El tamaño del objeto en la escena será proporcional al MAX_DIMENSION.
                         const shape = new THREE.Shape(mainContour.map(p => new THREE.Vector2(p.x - canvas.width / 2, -p.y + canvas.height / 2)));
+                        shape.closePath();
                         
                         const group = new THREE.Group();
                         group.userData.type = "SKETCH";
                         const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
                         const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-                        group.userData.shapeForExtrusion = [shape]; 
+                        group.userData.shapesForExtrusion = [shape]; 
                         group.add(line);
 
                         scene.add(group);
