@@ -232,7 +232,7 @@
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const sun = new THREE.DirectionalLight(0xffffff, 1);
-    sun.position.set(100, 100, 200);
+    sun.position.set(500, 500, 500);
     scene.add(sun);
 
     let mode = 'SELECT';
@@ -252,7 +252,7 @@
         if(v === 'top') camera.position.set(0, 0, 350);
         if(v === 'front') camera.position.set(0, -350, 0);
         if(v === 'side') camera.position.set(350, 0, 0);
-        if(v === 'iso') camera.position.set(0, 350, 350); 
+        if(v === 'iso') camera.position.set(0, -350, 350); 
         camera.lookAt(0,0,0);
         controls.update();
     };
@@ -1363,7 +1363,7 @@
             const orbitStep = 0.1;
             const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
             
-            // Calculamos la nueva posición rotando sobre el eje Z
+            
             const x = camera.position.x;
             const y = camera.position.y;
             
