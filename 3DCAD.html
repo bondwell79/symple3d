@@ -211,6 +211,7 @@
         frustumSize / 2, frustumSize / -2, 
         0.1, 2000
     );
+    camera.up.set(0, 0, 1);
     camera.position.set(0, 0, 350);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -219,6 +220,9 @@
     document.body.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
+    controls.addEventListener('end', function() {
+        controls.target.set(0, 0, 0);
+    });
     const tControls = new TransformControls(camera, renderer.domElement);
     scene.add(tControls);
     tControls.addEventListener('objectChange', updateUI);
@@ -254,6 +258,9 @@
         if(v === 'side') camera.position.set(350, 0, 0);
         if(v === 'iso') camera.position.set(0, -350, 350); 
         camera.lookAt(0,0,0);
+        controls.target.set(0,0,0);
+
+
         controls.update();
     };
 
