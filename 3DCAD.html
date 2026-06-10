@@ -76,7 +76,8 @@
         <div class="dropdown">
             <div class="drop-opt" id="mod-center"><i class="fas fa-crosshairs"></i>Centrar en Cama</div>
             <div class="drop-opt" id="mod-scale"><i class="fas fa-expand-arrows-alt"></i>Escalado a dimesión máxima</div>
-            <div class="drop-opt" id="mod-ground"><i class="fas fa-arrow-down-to-line"></i>Apoyar en el Suelo</div>
+            <div class="drop-opt" id="mod-ground"><i class="fas fa-grip-lines"></i>Apoyar en el Suelo</div>
+            <div class="drop-opt" id="mod-duplicate"><i class="fas fa-clone"></i>Duplicar Objeto</div>
         </div>
     </div>
     <div class="menu-item"><i class="fas fa-cube"></i>Objetos
@@ -450,6 +451,65 @@
 
 
     // --- FUNCIONES DE MODELADO ---
+    document.getElementById('mod-duplicate').onclick = () => {
+        if (selectedObjects.length === 0) {
+            alert("Por favor, selecciona al menos un objeto para duplicar.");
+            return;
+        }
+
+        tControls.detach();
+        const newClones = [];
+
+        selectedObjects.forEach(original => {
+        const clone = original.clone(true);
+
+        // Si el objeto original es una malla y estaba resaltado, el clon
+        // hereda el estado de "seleccionado" (material azul, aristas, etc.).
+        // Tenemos que revertir esto para que el clon tenga el estado original.
+        if (original.isMesh && original.userData.originalMaterial) {
+            // 1. El material del clon es el azul de selección. Lo reemplazamos
+            //    por un clon del material original guardado en userData.
+            clone.material = original.userData.originalMaterial.clone();
+
+            // 2. El clon también heredó las aristas de resaltado como un hijo. Las buscamos y eliminamos.
+            const edgeChild = clone.children.find(c => c.userData.isHighlightEdge);
+            if (edgeChild) {
+                clone.remove(edgeChild);
+            }
+
+            // 3. Limpiamos las propiedades de userData que solo se usan para el resaltado.
+            delete clone.userData.originalMaterial;
+            delete clone.userData.selectionBox;
+        }
+
+        // Para los croquis, nos aseguramos de que la información para extruir se copie bien.
+        // La clonación por defecto a veces no copia bien datos personalizados complejos.
+        if (original.userData.shapesForExtrusion) {
+            clone.userData.shapesForExtrusion = original.userData.shapesForExtrusion;
+        }
+
+        clone.userData.name += `copia ${objectCounter++}`;
+
+        // Desplazarlo un poco para que no se superponga con el original
+        const offset = 10;
+        clone.position.add(new THREE.Vector3(offset, offset, 0));
+
+        scene.add(clone);
+        objects.push(clone);
+        newClones.push(clone);
+        });
+
+        // Limpiar selección anterior y seleccionar los nuevos clones
+        clearAllHighlights();
+        selectedObjects = newClones;
+        selectedObjects.forEach(applySelectionHighlight);
+        
+        if (selectedObjects.length === 1) {
+            tControls.attach(selectedObjects[0]);
+        }
+        updateUI();
+    };
+
     document.getElementById('mod-center').onclick = () => { if(selectedObjects.length > 0) selectedObjects.forEach(o => o.position.set(0,0,0)); };
 
     document.getElementById('mod-merge').onclick = () => {
