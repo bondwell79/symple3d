@@ -87,7 +87,7 @@
             <div class="drop-opt" id="mod-cube"><i class="far fa-cube"></i>Añadir Cubo (mesh)</div>
             <div class="drop-opt" id="mod-circulo"><i class="far fa-circle"></i>Añadir Círculo (croquis)</div>
             <div class="drop-opt" id="mod-sphere"><i class="fas fa-globe"></i>Añadir Esfera (mesh)</div>
-            <div class="drop-opt" id="mod-triangle"><i class="fas fa-play"></i>Añadir Triángulo (mesh)</div>
+            <div class="drop-opt" id="mod-triangle"><i class="fas fa-play"></i>Añadir Triángulo (croquis)</div>
             <div class="drop-opt" id="mod-cylinder"><i class="fas fa-database"></i>Añadir Cilindro (mesh)</div>
         </div>
     </div>
@@ -471,6 +471,8 @@
         const finalMesh = CSG.toMesh(resultCsg, meshes[0].matrix);
         finalMesh.material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
         finalMesh.userData.type = "MESH";
+        finalMesh.userData.creationType = "Malla Fusionada"; 
+        
         
         // Limpiar y añadir el nuevo objeto
         tControls.detach();
@@ -529,6 +531,7 @@
             // Crear una nueva malla con la geometría simplificada
             const newMesh = new THREE.Mesh(simplifiedGeometry, mesh.material.clone());
             newMesh.userData.type = "MESH";
+            newMesh.userData.creationType = "Malla Simplificada";
             
             // Copiar la posición, rotación y escala del objeto original
             newMesh.position.copy(mesh.position);
@@ -666,6 +669,7 @@
             const shapes = font.generateShapes(textStr, 20);
             const group = new THREE.Group();
             group.userData.type = "SKETCH";
+            group.userData.creationType = "Texto";
             group.userData.isTextSketch = true;
             group.userData.shapesForExtrusion = shapes; // Guardamos las formas para extrusión posterior
 
@@ -705,6 +709,7 @@
 
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
+        group.userData.creationType = "Rectángulo";
         // Formato unificado:
         group.userData.shapesForExtrusion = [shape]; 
 
@@ -733,6 +738,7 @@
         
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
+        group.userData.creationType = "Círculo";
         // Formato unificado:
         group.userData.shapesForExtrusion = [shape]; 
 
@@ -756,6 +762,7 @@
         const geometry = new THREE.SphereGeometry(radius, 32, 16);
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
         mesh.userData.type = "MESH";
+        mesh.userData.creationType = "Esfera";
         
         scene.add(mesh);
         objects.push(mesh);
@@ -774,7 +781,7 @@
         const geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
         mesh.userData.type = "MESH";
-        
+        mesh.userData.creationType = "Cilindro";
         scene.add(mesh);
         objects.push(mesh);
 
@@ -791,7 +798,7 @@
         const geometry = new THREE.BoxGeometry(size, size, size);
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
         mesh.userData.type = "MESH";
-        
+        mesh.userData.creationType = "Cubo";
         scene.add(mesh);
         objects.push(mesh);
 
@@ -802,7 +809,7 @@
         updateUI();
     };
 
-    // Añadir Triángulo 3D directamente
+    // Añadir Triángulo como croquis  directamente
 document.getElementById('mod-triangle').onclick = () => {
     const shape = new THREE.Shape();
     const width = 60;
@@ -814,19 +821,24 @@ document.getElementById('mod-triangle').onclick = () => {
     shape.lineTo(-width / 2, -height / 2); // Vértice inferior izquierdo
     shape.closePath(); // Cierra la forma
 
-    const geometry = new THREE.ShapeGeometry(shape);
-    const material = new THREE.MeshPhongMaterial({ color: getRandomPastelColor(), side: THREE.DoubleSide });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.userData.type = "MESH";
+    const group = new THREE.Group();
+    group.userData.type = "SKETCH";
+    group.userData.creationType = "Triángulo";
+    group.userData.shapesForExtrusion = [shape];
+
+    const points = shape.getPoints();
+    // Asegúrate de añadir el primer punto al final para cerrar la línea visualmente
+    const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]); 
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+    group.add(line);
     
     // Añade el objeto a la escena y lo selecciona
-    scene.add(mesh);
-    objects.push(mesh);
+    scene.add(group);
+    objects.push(group);
 
     clearAllHighlights();
-    selectedObjects = [mesh];
-    applySelectionHighlight(mesh);
-    tControls.attach(mesh);
+    selectedObjects = [group];
+    tControls.attach(group);
     updateUI();
     };
 
@@ -864,7 +876,7 @@ document.getElementById('mod-triangle').onclick = () => {
         const geometry = new THREE.ExtrudeGeometry(transformedShapes, { depth: h, bevelEnabled: false });
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
         mesh.userData.type = "MESH";
-        
+        mesh.userData.creationType = "Malla Extruida";
         recenterPivot(mesh);
         mesh.position.copy(selectedObject.position); 
 
@@ -948,6 +960,7 @@ document.getElementById('mod-triangle').onclick = () => {
         const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
+        group.userData.creationType = "Croquis";
         group.userData.shapesForExtrusion = [shape];
 
         const geo = new THREE.BufferGeometry().setFromPoints([...centeredPoints, centeredPoints[0]]);
@@ -1015,7 +1028,7 @@ document.getElementById('mod-triangle').onclick = () => {
         objects.forEach(obj => {
             if (!obj.userData.name) {
                 objectCounter++;
-                const type = obj.userData.type || 'Object';
+                const type = obj.userData.creationType || obj.userData.type || 'Objeto';
                 obj.userData.name = `${type}_${objectCounter}`;
             }
 
@@ -1197,6 +1210,7 @@ document.getElementById('mod-triangle').onclick = () => {
             const geo = new STLLoader().parse(ev.target.result);
             const m = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({color: 0x888888}));
             m.userData.type = "MESH";
+            m.userData.creationType = "Malla Cargada";
             recenterPivot(m);
             scene.add(m); 
             objects.push(m);
@@ -1279,6 +1293,7 @@ document.getElementById('mod-triangle').onclick = () => {
                         
                         const group = new THREE.Group();
                         group.userData.type = "SKETCH";
+                        group.userData.creationType = "Croquis desde Imagen";
                         const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints());
                         const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
                         group.userData.shapesForExtrusion = [shape]; 
