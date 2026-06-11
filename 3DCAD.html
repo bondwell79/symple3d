@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Symple3D</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="libreria/fontawesome/all.min.css">
     <style>
         :root { --bg: #0a0a0a; --ui: #252526; --accent: #00d2ff; --draw: #ff3333; --status-bg: #007acc; }
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #fff; }
@@ -229,9 +229,9 @@
 <script type="importmap">
     {
         "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-        "three-csg-ts": "https://esm.sh/three-csg-ts?external=three"
+        "three": "./libreria/three/three.module.js",
+        "three/addons/": "./libreria/three/addons/",
+        "three-csg-ts": "./libreria/three-csg-ts.js"
         }
     }
 </script>
