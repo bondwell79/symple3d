@@ -1107,6 +1107,7 @@ document.getElementById('mod-triangle').onclick = () => {
 
         scene.add(mesh);
         objects.push(mesh);
+        removeSelectionHighlight(selectedObject);
         scene.remove(selectedObject);
         objects = objects.filter(o => o !== selectedObject);
         
