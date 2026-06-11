@@ -12,9 +12,14 @@
         .menu-item { position: relative; padding: 0 15px; cursor: pointer; font-size: 13px; line-height: 35px; }
         .menu-item:hover { background: #3e3e42; }
         .dropdown { display: none; position: absolute; top: 35px; left: 0; background: var(--ui); min-width: 250px; border: 1px solid #454545; box-shadow: 0 4px 10px #000; }
-        .menu-item:hover .dropdown { display: block; }
-        .drop-opt { padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; }
+        .menu-item:hover > .dropdown { display: block; }
+        .drop-opt { position: relative; padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; }
         .drop-opt:hover { background: #094771; }
+
+        .has-submenu::after { content: '▶'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%) scale(0.6); color: #ccc; }
+        .has-submenu:hover::after { color: #fff; }
+        .submenu { display: none; position: absolute; left: 100%; top: -1px; min-width: 150px; }
+        .has-submenu:hover > .submenu { display: block; }
 
         .menu-item, .drop-opt {display: flex; align-items: center; gap: 10px; /* Espacio entre icono y texto */}
         .menu-item > i, .drop-opt > i { width: 16px; text-align: center;color: #ccc;}
@@ -36,7 +41,7 @@
         .tool-btn.active { background: var(--accent); color: #000; font-weight: bold; }
         .tool-btn.action { background: #4caf50; border: none; display: none; }
 
-        #extrude-modal, #scale-modal, #text-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        #extrude-modal, #scale-modal, #text-modal, #dimensions-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
 
@@ -59,8 +64,10 @@
 <header>
     <div class="menu-item"><i class="fas fa-folder-open"></i>Archivo
         <div class="dropdown">
-            <div class="drop-opt" onclick="document.getElementById('file-stl').click()"><i class="fas fa-upload"></i>Importar STL</div>
-            <div class="drop-opt" id="btn-export"><i class="fas fa-download"></i>Exportar Proyecto (STL)</div>
+            <div class="drop-opt" onclick="document.getElementById('file-json').click()"><i class="fas fa-upload"></i>Cargar proyecto JSON</div>
+            <div class="drop-opt" id="btn-export-json"><i class="fas fa-download"></i>Guardar proyecto en JSON</div>
+            <div class="drop-opt" onclick="document.getElementById('file-stl').click()"><i class="fas fa-upload"></i>Importar diseño STL</div>
+            <div class="drop-opt" id="btn-export"><i class="fas fa-download"></i>Exportar diseño STL</div>
             <div class="drop-opt" onclick="window.location.reload()"><i class="fas fa-file"></i>Nuevo</div>
         </div>
     </div>
@@ -75,12 +82,24 @@
     <div class="menu-item"><i class="fas fa-edit"></i>Modificar
         <div class="dropdown">
             <div class="drop-opt" id="mod-center"><i class="fas fa-crosshairs"></i>Centrar en Cama</div>
+            <div class="drop-opt" id="mod-dimensions"><i class="fas fa-ruler-combined"></i>Editar Dimensiones (X,Y,Z)</div>
             <div class="drop-opt" id="mod-scale"><i class="fas fa-expand-arrows-alt"></i>Escalado a dimesión máxima</div>
             <div class="drop-opt" id="mod-ground"><i class="fas fa-grip-lines"></i>Apoyar en el Suelo</div>
             <div class="drop-opt" id="mod-duplicate"><i class="fas fa-clone"></i>Duplicar Objeto</div>
-            <div class="drop-opt" id="mod-espejo-x"><i class="fas fa-exchange-alt"></i>Espejar Objeto (Eje X)</div>
-            <div class="drop-opt" id="mod-espejo-y"><i class="fas fa-exchange-alt"></i>Espejar Objeto (Eje Y)</div>
-            <div class="drop-opt" id="mod-espejo-z"><i class="fas fa-exchange-alt"></i>Espejar Objeto (Eje Z)</div>
+            <div class="drop-opt has-submenu"><i class="fas fa-exchange-alt"></i>Espejar Objeto
+                <div class="submenu dropdown">
+                    <div class="drop-opt" id="mod-espejo-x">Eje X</div>
+                    <div class="drop-opt" id="mod-espejo-y">Eje Y</div>
+                    <div class="drop-opt" id="mod-espejo-z">Eje Z</div>
+                </div>
+            </div>
+            <div class="drop-opt has-submenu"><i class="fas fa-compress-arrows-alt"></i>Alinear objetos
+                <div class="submenu dropdown">
+                    <div class="drop-opt" id="mod-alinear-x">Eje X</div>
+                    <div class="drop-opt" id="mod-alinear-y">Eje Y</div>
+                    <div class="drop-opt" id="mod-alinear-z">Eje Z</div>
+                </div>
+            </div>
         </div>
     </div>
     <div class="menu-item"><i class="fas fa-cube"></i>Objetos
@@ -125,6 +144,23 @@
     <h4 style="margin:0 0 10px 0">Escalar Objeto</h4>
     Tamaño máximo: <input type="number" id="scale-size" value="150" style="width:60px"> mm
     <button id="btn-do-scale" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-left:10px">OK</button>
+</div>
+
+<div id="dimensions-modal">
+    <h4 style="margin:0 0 15px 0">Editar Dimensiones</h4>
+    <div>
+        <label for="dim-x" style="display:inline-block; width:20px;">X:</label>
+        <input type="number" id="dim-x" style="width:70px"> mm
+    </div>
+    <div style="margin-top:8px">
+        <label for="dim-y" style="display:inline-block; width:20px;">Y:</label>
+        <input type="number" id="dim-y" style="width:70px"> mm
+    </div>
+    <div style="margin-top:8px">
+        <label for="dim-z" style="display:inline-block; width:20px;">Z:</label>
+        <input type="number" id="dim-z" style="width:70px"> mm
+    </div>
+    <button id="btn-do-dimensions" style="background:var(--accent); border:none; padding:8px 15px; cursor:pointer; font-weight:bold; margin-top:15px; width:100%;">APLICAR</button>
 </div>
 
 <div id="text-modal">
@@ -185,6 +221,7 @@
     <div id="ctx-delete">Eliminar</div>
 </div>
 
+<input type="file" id="file-json" accept=".json" style="display: none;">
 <input type="file" id="file-stl" accept=".stl">
 <input type="file" id="file-img" accept="image/*">
 <canvas id="img-processor"></canvas>
@@ -455,6 +492,33 @@
 
     // --- FUNCIONES DE MODELADO ---
 
+    function alignSelectedObjects(axis) {
+        if (selectedObjects.length < 2) {
+            alert("Por favor, selecciona al menos dos objetos para alinear.");
+            return;
+        }
+
+        const axisLower = axis.toLowerCase();
+        if (!['x', 'y', 'z'].includes(axisLower)) return;
+
+        // 1. Calcular la posición media en el eje especificado
+        const sum = selectedObjects.reduce((acc, obj) => acc + obj.position[axisLower], 0);
+        const average = sum / selectedObjects.length;
+
+        // 2. Mover cada objeto a la posición media
+        selectedObjects.forEach(obj => {
+            obj.position[axisLower] = average;
+        });
+
+        // 3. Actualizar la interfaz y los controles
+        updateUI();
+        if (selectedObjects.length === 1) {
+            tControls.attach(selectedObjects[0]);
+        } else {
+            tControls.detach();
+        }
+    }
+
     function mirrorSelectedObjects(axis) {
         if (selectedObjects.length === 0) {
             alert("Por favor, selecciona al menos un objeto para espejar.");
@@ -505,10 +569,14 @@
     }
 
     // Vinculamos la nueva función a los botones del menú.
+
     document.getElementById('mod-espejo-x').onclick = () => mirrorSelectedObjects('x');
     document.getElementById('mod-espejo-y').onclick = () => mirrorSelectedObjects('y');
     document.getElementById('mod-espejo-z').onclick = () => mirrorSelectedObjects('z');
 
+    document.getElementById('mod-alinear-x').onclick = () => alignSelectedObjects('x');
+    document.getElementById('mod-alinear-y').onclick = () => alignSelectedObjects('y');
+    document.getElementById('mod-alinear-z').onclick = () => alignSelectedObjects('z');
 
     document.getElementById('mod-duplicate').onclick = () => {
         if (selectedObjects.length === 0) {
@@ -551,7 +619,7 @@
             clone.userData.shapesForExtrusion = original.userData.shapesForExtrusion;
         }
 
-        clone.userData.name += `copia ${objectCounter++}`;
+        clone.userData.name += `_copia ${objectCounter++}`;
 
         // Desplazarlo un poco para que no se superponga con el original
         const offset = 10;
@@ -1345,6 +1413,59 @@ document.getElementById('mod-triangle').onclick = () => {
         };
         reader.readAsArrayBuffer(e.target.files[0]);
     };
+
+    document.getElementById('file-json').onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const jsonString = event.target.result;
+                const loadedObjectsData = JSON.parse(jsonString);
+
+                // 1. Limpiar la escena actual
+                clearAllHighlights();
+                tControls.detach();
+                selectedObjects = [];
+                objects.forEach(obj => scene.remove(obj));
+                objects = [];
+                objectCounter = 0;
+
+                // 2. Usar ObjectLoader para reconstruir los objetos
+                const loader = new THREE.ObjectLoader();
+
+                loadedObjectsData.forEach(objectJSON => {
+                    // 'parse' reconstruye el objeto completo (Mesh, Group, etc.)
+                    // incluyendo geometría, material, hijos y userData.
+                    const loadedObject = loader.parse(objectJSON);
+
+                    // IMPORTANTE: ObjectLoader reconstruye la estructura del croquis (SKETCH)
+                    // pero no su representación visual (las líneas). La añadimos manualmente.
+                    if (loadedObject.isGroup && loadedObject.userData.type === 'SKETCH') {
+                        if (loadedObject.userData.shapesForExtrusion) {
+                            // Las formas se cargan como objetos genéricos, las convertimos de nuevo a instancias de THREE.Shape
+                            const parsedShapes = loadedObject.userData.shapesForExtrusion.map(s => new THREE.Shape().fromJSON(s));
+                            loadedObject.userData.shapesForExtrusion = parsedShapes; // Reemplazamos con las instancias correctas
+                        }
+                    }
+                    
+                    scene.add(loadedObject);
+                    objects.push(loadedObject);
+                });
+
+                updateUI();
+                alert("Proyecto cargado con éxito.");
+
+            } catch (error) {
+                console.error("Error al cargar el proyecto JSON:", error);
+                alert("No se pudo cargar el archivo. Comprueba la consola para más detalles.");
+            }
+        };
+
+        reader.readAsText(file);
+        e.target.value = '';
+    };
     
     document.getElementById('btn-export').onclick = () => {
         const fileName = prompt("Introduce el nombre del archivo:", "modelo3d.stl");
@@ -1362,6 +1483,42 @@ document.getElementById('mod-triangle').onclick = () => {
 
         // 2. Volvemos a mostrar los controles
         scene.add(tControls);
+    };
+
+    document.getElementById('btn-export-json').onclick = () => {
+        const fileName = prompt("Introduce el nombre del archivo para guardar el proyecto:", "proyecto3d.json");
+        if (!fileName) return; // Salir si el usuario cancela
+
+        // Deseleccionar objetos antes de guardar es una buena práctica
+        if (selectedObjects.length > 0) {
+            clearAllHighlights();
+            tControls.detach();
+            selectedObjects = [];
+            updateUI();
+        }
+
+        // Usamos el método toJSON() nativo de Three.js, que es más robusto.
+        // Además, filtramos cualquier malla que pueda estar vacía para evitar errores.
+        const exportableObjects = objects
+            .filter(obj => {
+                if (obj.isMesh && (!obj.geometry.attributes.position || obj.geometry.attributes.position.count === 0)) {
+                    console.warn(`Omitiendo malla vacía "${obj.userData.name || 'Desconocido'}" al guardar.`);
+                    return false; // No incluir este objeto en el archivo guardado
+                }
+                return true;
+            })
+            .map(obj => obj.toJSON());
+
+        // El resultado es un array de objetos JSON en el formato estándar de Three.js
+        const jsonString = JSON.stringify(exportableObjects, null, 2);
+
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
+        link.click();
+
+        alert(`Proyecto guardado en ${link.download}`);
     };
 
     document.getElementById('file-img').onchange = (e) => {
@@ -1531,6 +1688,7 @@ document.getElementById('mod-triangle').onclick = () => {
         const scaleModal = document.getElementById('scale-modal');
         const textModal = document.getElementById('text-modal');
         const positionModal = document.getElementById('position-modal');
+        const dimensionsModal = document.getElementById('dimensions-modal');
 
         
         // Esc para deseleccionar y volver a modo selección
@@ -1540,12 +1698,14 @@ document.getElementById('mod-triangle').onclick = () => {
         if (extrudeModal && extrudeModal.style.display === 'block' ||
             scaleModal && scaleModal.style.display === 'block' ||
             textModal && textModal.style.display === 'block' ||
-            positionModal && positionModal.style.display === 'block') 
+            positionModal && positionModal.style.display === 'block' ||
+            dimensionsModal && dimensionsModal.style.display === 'block') 
                 {
                 extrudeModal.style.display = 'none';
                 scaleModal.style.display = 'none';
                 textModal.style.display = 'none';
                 positionModal.style.display = 'none';
+                dimensionsModal.style.display = 'none';
                 return; 
                 }
         
@@ -1567,7 +1727,8 @@ document.getElementById('mod-triangle').onclick = () => {
             if (extrudeModal && extrudeModal.style.display === 'block' ||
                 scaleModal && scaleModal.style.display === 'block' ||
                 textModal && textModal.style.display === 'block' ||
-                positionModal && positionModal.style.display === 'block') 
+                positionModal && positionModal.style.display === 'block' ||
+                dimensionsModal && dimensionsModal.style.display === 'block') 
                     {
                     return; 
                     }
@@ -1576,9 +1737,9 @@ document.getElementById('mod-triangle').onclick = () => {
             }
 
         // Atajos de Transformación
-        if (e.key.toLowerCase() === 'w') tControls.setMode('translate'); // Mover
-        if (e.key.toLowerCase() === 'e') tControls.setMode('rotate');    // Rotar
-        if (e.key.toLowerCase() === 'r') tControls.setMode('scale');     // Escalar
+        if (e.key.toLowerCase() === 't') tControls.setMode('translate'); // Mover
+        if (e.key.toLowerCase() === 'r') tControls.setMode('rotate');    // Rotar
+        if (e.key.toLowerCase() === 's') tControls.setMode('scale');     // Escalar
         if (e.key.toLowerCase() === 'p') openPositionModal();
         
         if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
@@ -1600,6 +1761,71 @@ document.getElementById('mod-triangle').onclick = () => {
         }
     }
     window.addEventListener('keydown', globalKeyDownHandler);
+
+    // --- DIÁLOGO DE DIMENSIONES (X, Y, Z) ---
+    function openDimensionsModal() {
+        if (selectedObjects.length !== 1) {
+            alert("Por favor, selecciona un único objeto para editar sus dimensiones.");
+            return;
+        }
+        const selectedObject = selectedObjects[0];
+        
+        // Calcular tamaño actual
+        const box = new THREE.Box3().setFromObject(selectedObject);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        // Rellenar los campos del modal
+
+        if (size.x === 0) size.x = 1; // Evitar mostrar 0 para objetos planos
+        if (size.y === 0) size.y = 1; // Evitar mostrar 0 para objetos planos
+        if (size.z === 0) size.z = 1; // Evitar mostrar 0 para objetos planos
+
+        document.getElementById('dim-x').value = size.x.toFixed(2);
+        document.getElementById('dim-y').value = size.y.toFixed(2);
+        document.getElementById('dim-z').value = size.z.toFixed(2);
+        
+        document.getElementById('dimensions-modal').style.display = 'block';
+    }
+
+    // Asignar la función al botón del menú
+    document.getElementById('mod-dimensions').onclick = openDimensionsModal;
+
+    // Asignar la lógica al botón "APLICAR" del modal
+    document.getElementById('btn-do-dimensions').onclick = () => {
+        if (selectedObjects.length !== 1) return;
+        const selectedObject = selectedObjects[0];
+
+        const newX = parseFloat(document.getElementById('dim-x').value);
+        const newY = parseFloat(document.getElementById('dim-y').value);
+        const newZ = parseFloat(document.getElementById('dim-z').value);
+
+        if (isNaN(newX) || isNaN(newY) || isNaN(newZ) || newX <= 0 || newY <= 0 || newZ <= 0) {
+            alert("Por favor, introduce valores numéricos positivos para todas las dimensiones.");
+            return;
+        }
+        
+        // Calcular el tamaño actual
+        const box = new THREE.Box3().setFromObject(selectedObject);
+        const currentSize = new THREE.Vector3();
+        box.getSize(currentSize);
+
+        // Calcular el factor de escala para cada eje
+        // Evitar división por cero si una dimensión es 0
+        const scaleX = currentSize.x > 0 ? newX / currentSize.x : 0;
+        const scaleY = currentSize.y > 0 ? newY / currentSize.y : 0;
+        const scaleZ = currentSize.z > 0 ? newZ / currentSize.z : 0;
+
+        // Aplicar la escala
+        selectedObject.scale.x *= scaleX;
+        selectedObject.scale.y *= scaleY;
+        selectedObject.scale.z *= scaleZ;
+
+        // Actualizar UI y cerrar modal
+        document.getElementById('dimensions-modal').style.display = 'none';
+        tControls.attach(selectedObject);
+        updateUI();
+    };
 
 </script>
 </body>
