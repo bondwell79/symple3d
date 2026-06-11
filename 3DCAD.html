@@ -432,17 +432,18 @@
         removeSelectionHighlight(object); // Evita duplicados
 
         if (object.isMesh) {
-             // 1. Guardar material original y aplicar el de selección (azul marino)
+             // Estos efectos son solo para mallas
             object.userData.originalMaterial = object.material;
             object.material = new THREE.MeshPhongMaterial({ color: 0x00008B });
 
-            // 2. Añadir aristas (azul celeste)
             const edges = new THREE.EdgesGeometry(object.geometry);
             const selectionEdges = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x87CEEB, linewidth: 2 }));
-            selectionEdges.userData.isHighlightEdge = true; // Lo marcamos para encontrarlo y borrarlo después
+            selectionEdges.userData.isHighlightEdge = true;
             object.add(selectionEdges);
+        }
 
-            // 3. Añadir recuadro 3D (amarillo)
+        // Aplicar el recuadro amarillo a Mallas y Croquis
+        if (object.isMesh || (object.isGroup && object.userData.type === 'SKETCH')) {
             const selectionBox = new THREE.BoxHelper(object, 0xFFFF00);
             object.userData.selectionBox = selectionBox;
             scene.add(selectionBox);
@@ -1081,7 +1082,15 @@ document.getElementById('mod-triangle').onclick = () => {
         );
 
         const originalShapes = selectedObject.userData.shapesForExtrusion;
-        const geometry = new THREE.ExtrudeGeometry(originalShapes, { depth: h, bevelEnabled: false });
+
+        // 1. Creamos la geometría de extrusión de forma temporal
+        const extrudeGeo = new THREE.ExtrudeGeometry(originalShapes, { depth: h, bevelEnabled: false });
+        // 2. La convertimos a una geometría genérica que guardará los vértices
+        const geometry = new THREE.BufferGeometry().copy(extrudeGeo);
+        // 3. Liberamos la memoria de la geometría temporal
+        extrudeGeo.dispose();
+
+
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
 
         geometry.computeBoundingBox();
@@ -1491,7 +1500,6 @@ document.getElementById('mod-triangle').onclick = () => {
                 });
 
                 updateUI();
-                alert("Proyecto cargado con éxito.");
 
             } catch (error) {
                 console.error("Error al cargar el proyecto JSON:", error);
