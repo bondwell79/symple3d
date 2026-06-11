@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Symple3D</title>
-    <link rel="stylesheet" href="libreria/fontawesome/all.min.css">
+    <link rel="stylesheet" href="libreria/fontawesome/css/all.min.css">
     <style>
         :root { --bg: #0a0a0a; --ui: #252526; --accent: #00d2ff; --draw: #ff3333; --status-bg: #007acc; }
         body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #fff; }
@@ -229,9 +229,9 @@
 <script type="importmap">
     {
         "imports": {
-        "three": "./libreria/three/three.module.js",
-        "three/addons/": "./libreria/three/addons/",
-        "three-csg-ts": "./libreria/three-csg-ts.js"
+            "three": "./libreria/three/three.module.js",
+            "three/addons/": "./libreria/three/addons/",
+            "three-csg-ts": "./libreria/three-csg-ts.js"
         }
     }
 </script>
@@ -833,10 +833,10 @@
     };
 
     const fontMap = {
-        'helvetiker_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json',
-        'optimer_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/optimer_regular.typeface.json',
-        'gentilis_bold': 'https://unpkg.com/three@0.160.0/examples/fonts/gentilis_bold.typeface.json',
-        'droid/droid_serif_regular': 'https://unpkg.com/three@0.160.0/examples/fonts/droid/droid_serif_regular.typeface.json'
+        'helvetiker_regular': 'libreria/three/addons/fonts/helvetiker_regular.typeface.json',
+        'optimer_regular': 'libreria/three/addons/fonts/optimer_regular.typeface.json',
+        'gentilis_bold': 'libreria/three/addons/fonts/gentilis_bold.typeface.json',
+        'droid/droid_serif_regular': 'libreria/three/addons/fonts/droid/droid_serif_regular.typeface.json'
     };
 
     document.getElementById('btn-do-add-text').onclick = () => {
