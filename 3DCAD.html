@@ -839,52 +839,78 @@
     };
 
     document.getElementById('btn-do-add-text').onclick = () => {
-        const textStr = document.getElementById('text-input').value;
-        const fontName = document.getElementById('font-select').value;
-        
-        if (!textStr) {
-            alert("Por favor, introduce un texto.");
-            return;
-        }
-        
-        document.getElementById('text-modal').style.display = 'none';
+    const textStr = document.getElementById('text-input').value;
+    const fontName = document.getElementById('font-select').value;
+    
+    if (!textStr) {
+        alert("Por favor, introduce un texto.");
+        return;
+    }
+    
+    document.getElementById('text-modal').style.display = 'none';
 
-        const fontURL = fontMap[fontName];
-        if (!fontURL) {
-            alert("Fuente no válida seleccionada.");
-            return;
-        }
+    const fontURL = fontMap[fontName];
+    if (!fontURL) {
+        alert("Fuente no válida seleccionada.");
+        return;
+    }
 
-        const loader = new FontLoader();
-        loader.load(fontURL, (font) => {
-            const shapes = font.generateShapes(textStr, 20);
-            const group = new THREE.Group();
-            group.userData.type = "SKETCH";
-            group.userData.creationType = "Texto";
-            group.userData.isTextSketch = true;
-            group.userData.shapesForExtrusion = shapes; // Guardamos las formas para extrusión posterior
+    const loader = new FontLoader();
+    loader.load(fontURL, (font) => {
+        // 1. Generar las formas originales (no están centradas).
+        const originalShapes = font.generateShapes(textStr, 20);
 
-            shapes.forEach(shape => {
-                const points = shape.getPoints();
-                const geometry = new THREE.BufferGeometry().setFromPoints(points);
-                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff }));
-                group.add(line);
-            });
+        // 2. Medir el centro geométrico de todo el conjunto de formas.
+        const tempGeometry = new THREE.ShapeGeometry(originalShapes);
+        tempGeometry.computeBoundingBox();
+        const center = new THREE.Vector2();
+        tempGeometry.boundingBox.getCenter(center);
+        tempGeometry.dispose(); // Liberar memoria
 
-            // Centrar croquis
-            const box = new THREE.Box3().setFromObject(group);
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            group.children.forEach(c => c.position.sub(center));
-
-            scene.add(group);
-            objects.push(group);
+        // 3. Crear un NUEVO array de formas donde cada punto ha sido trasladado.
+        const centeredShapes = originalShapes.map(shape => {
+            // Trasladamos los puntos del contorno exterior
+            const translatedOuterPoints = shape.getPoints().map(p => p.clone().sub(center));
+            const newShape = new THREE.Shape(translatedOuterPoints);
             
-            clearAllHighlights();
-            selectedObjects = [group];
-            tControls.attach(group);
-            updateUI();
+            // Hacemos lo mismo para cada agujero y lo añadimos a la nueva forma
+            newShape.holes = shape.holes.map(hole => {
+                const translatedHolePoints = hole.getPoints().map(p => p.clone().sub(center));
+                return new THREE.Path(translatedHolePoints);
+            });
+            
+            return newShape;
         });
+
+        // 4. A partir de aquí, usamos 'centeredShapes' para todo, ya que son los datos correctos.
+        const group = new THREE.Group();
+        group.userData.type = "SKETCH";
+        group.userData.creationType = "Texto";
+        group.userData.isTextSketch = true;
+        group.userData.shapesForExtrusion = centeredShapes;
+
+        // 5. Generar la visualización a partir de las formas ya centradas.
+        centeredShapes.forEach(shape => {
+            const outerPoints = shape.getPoints();
+            const outerGeometry = new THREE.BufferGeometry().setFromPoints(outerPoints);
+            group.add(new THREE.Line(outerGeometry, new THREE.LineBasicMaterial({ color: 0x00d2ff })));
+            
+            shape.holes.forEach(hole => {
+                const holePoints = hole.getPoints();
+                const holeGeometry = new THREE.BufferGeometry().setFromPoints(holePoints);
+                group.add(new THREE.Line(holeGeometry, new THREE.LineBasicMaterial({ color: 0x00d2ff })));
+            });
+        });
+
+        // 6. El grupo se añade en (0,0,0) y como su contenido ya está centrado, aparece correcto.
+        scene.add(group);
+        objects.push(group);
+        
+        clearAllHighlights();
+        selectedObjects = [group];
+        tControls.attach(group);
+        updateUI();
+    });
     };
 
     // Añadir Rectángulo como Croquis
@@ -1055,21 +1081,20 @@ document.getElementById('mod-triangle').onclick = () => {
         );
 
         const originalShapes = selectedObject.userData.shapesForExtrusion;
-        const transformedShapes = originalShapes.map(shape => {
-        const points = shape.getPoints();
-        const transformedPoints = points.map(p => {
-            const vec3 = new THREE.Vector3(p.x, p.y, 0).applyMatrix4(transformMatrix);
-            return new THREE.Vector2(vec3.x, vec3.y);
-        });
-        return new THREE.Shape(transformedPoints);
-        });
-
-        const geometry = new THREE.ExtrudeGeometry(transformedShapes, { depth: h, bevelEnabled: false });
+        const geometry = new THREE.ExtrudeGeometry(originalShapes, { depth: h, bevelEnabled: false });
         const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
+
+        geometry.computeBoundingBox();
+        const center = new THREE.Vector3();
+        geometry.boundingBox.getCenter(center);
+
+        geometry.translate(-center.x, -center.y, -center.z);
+        mesh.position.copy(selectedObject.position).add(center);
+
         mesh.userData.type = "MESH";
         mesh.userData.creationType = "Malla Extruida";
-        recenterPivot(mesh);
-        mesh.position.copy(selectedObject.position); 
+        mesh.quaternion.copy(selectedObject.quaternion);
+        mesh.scale.copy(selectedObject.scale);
 
         scene.add(mesh);
         objects.push(mesh);
@@ -1146,19 +1171,22 @@ document.getElementById('mod-triangle').onclick = () => {
         points.forEach(p => tempBox.expandByPoint(p));
         const center = new THREE.Vector3();
         tempBox.getCenter(center);
-        const centeredPoints = points.map(p => new THREE.Vector3(p.x - center.x, p.y - center.y, 0));
+        // 1. Crear puntos 2D ya centrados.
+        const centeredPoints = points.map(p => new THREE.Vector2(p.x - center.x, p.y - center.y));
 
-        const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
+        // 2. Usar estos puntos centrados TANTO para la forma de extrusión COMO para la línea visual.
+        const shape = new THREE.Shape(centeredPoints);
         const group = new THREE.Group();
         group.userData.type = "SKETCH";
         group.userData.creationType = "Croquis";
         group.userData.shapesForExtrusion = [shape];
 
-        const geo = new THREE.BufferGeometry().setFromPoints([...centeredPoints, centeredPoints[0]]);
+        const visualPoints = shape.getPoints();
+        const geo = new THREE.BufferGeometry().setFromPoints([...visualPoints, visualPoints[0]]);
         group.add(new THREE.Line(geo, new THREE.LineBasicMaterial({color: 0x00d2ff, linewidth: 2})));
 
+        // 3. Posicionar el GRUPO (el objeto contenedor) en el centro del dibujo original.
         group.position.copy(center);
-
         
         scene.add(group);
         objects.push(group);
@@ -1447,6 +1475,14 @@ document.getElementById('mod-triangle').onclick = () => {
                             // Las formas se cargan como objetos genéricos, las convertimos de nuevo a instancias de THREE.Shape
                             const parsedShapes = loadedObject.userData.shapesForExtrusion.map(s => new THREE.Shape().fromJSON(s));
                             loadedObject.userData.shapesForExtrusion = parsedShapes; // Reemplazamos con las instancias correctas
+                        
+                            // Volvemos a crear la representación visual del croquis (líneas)
+                            parsedShapes.forEach(shape => {
+                                const points = shape.getPoints();
+                                const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
+                                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                                loadedObject.add(line);
+                            });
                         }
                     }
                     
