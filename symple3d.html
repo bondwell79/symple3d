@@ -58,9 +58,115 @@
         #context-menu { display: none; position: absolute; background: #1b1b1b; border: 1px solid #555; z-index: 4000; box-shadow: 0 2px 8px #000; border-radius: 4px; }
         #context-menu div { padding: 8px 20px; font-size: 12px; color: white; cursor: pointer; }
         #context-menu div:hover { background: #c82333; }
-    </style>
+
+        #axes-helper-border {
+        position: fixed;
+        left: 20px;
+        bottom: 40px;
+        border: 1px solid #555;
+        pointer-events: none; /* Importante para que no bloquee los clics del ratón */
+        }
+        
+        /* --- Estilos del Modal de Bienvenida --- */
+        #welcome-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 10, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 5000;
+            backdrop-filter: blur(5px);
+            transition: opacity 0.3s ease;
+        }
+
+    #welcome-modal {
+        background: var(--ui);
+        padding: 30px 40px;
+        border-radius: 12px;
+        border: 1px solid #444;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        text-align: center;
+        width: 90%;
+        max-width: 500px;
+        color: #eee;
+        animation: fadeInScale 0.4s ease-out;
+    }
+
+    @keyframes fadeInScale {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    #welcome-modal h2 {
+        margin-top: 0;
+        color: var(--accent);
+        font-size: 24px;
+        font-weight: 600;
+    }
+
+    #welcome-modal .version {
+        margin: -10px 0 20px 0;
+        font-size: 14px;
+        color: #999;
+    }
+
+    #welcome-modal .credits {
+        margin: 25px 0;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    #welcome-modal .credits p {
+        margin: 5px 0;
+    }
+
+    #welcome-modal .credits strong {
+        color: #ccc;
+    }
+
+    #welcome-close-btn {
+        background: var(--accent);
+        border: none;
+        padding: 12px 25px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-top: 15px;
+        width: 100%;
+        border-radius: 6px;
+        color: #000;
+        font-size: 16px;
+        transition: background-color 0.2s, transform 0.2s;
+    }
+
+    #welcome-close-btn:hover {
+        background: #00b8e6;
+        transform: translateY(-2px);
+    }
+</style>
 </head>
 <body>
+<div id="welcome-modal-overlay">
+    <div id="welcome-modal">
+        <h2>Bienvenido a Symple3D</h2>
+        <p class="version">Versión 1.1</p>
+        <div class="credits">
+            <p>Un editor 3D simple y de código abierto para tus proyectos.</p>
+            <p>Wasx Alpha Software 1984, 2026</p>
+            <p>Programado por Rubén Pastor Villarrubia</p>
+        </div>
+        <button id="welcome-close-btn">Comenzar a Diseñar</button>
+    </div>
+</div>    
 <header>
     <div class="menu-item"><i class="fas fa-folder-open"></i>Archivo
         <div class="dropdown">
@@ -93,6 +199,15 @@
                     <div class="drop-opt" id="mod-espejo-z">Eje Z</div>
                 </div>
             </div>
+
+            <div class="drop-opt has-submenu"><i class="fas fa-sync-alt"></i>Girar 90°
+                <div class="submenu dropdown">
+                    <div class="drop-opt" id="mod-girar-x">Eje X</div>
+                    <div class="drop-opt" id="mod-girar-y">Eje Y</div>
+                    <div class="drop-opt" id="mod-girar-z">Eje Z</div>
+                </div>
+            </div>
+
             <div class="drop-opt has-submenu"><i class="fas fa-compress-arrows-alt"></i>Alinear objetos
                 <div class="submenu dropdown">
                     <div class="drop-opt" id="mod-alinear-x">Eje X</div>
@@ -213,6 +328,7 @@
         <span>Z: <span class="coord-val" id="st-z">0.00</span> mm</span>
     </div>
 </footer>
+<div id="axes-helper-border"></div>
 <div id="context-menu">
     <div id="ctx-move">Mover</div>
     <div id="ctx-rotate">Rotar</div>
@@ -262,10 +378,64 @@
     camera.up.set(0, 0, 1);
     camera.position.set(0, 0, 350);
 
+    // Pantalla
+
     const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.autoClear = false;
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     document.body.appendChild(renderer.domElement);
+
+    // Visor de ejes
+
+    let sceneAxes, cameraAxes;
+
+    function createAxisLabel(text, color) {
+    const canvas = document.createElement('canvas');
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    context.fillStyle = color;
+    context.font = 'bold 48px Arial';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(text, size / 2, size / 2);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(4, 4, 1); // Hacemos el sprite un poco más grande
+    return sprite;
+    }
+
+    function setupAxesHelper() {
+        sceneAxes = new THREE.Scene();
+        const axesHelper = new THREE.AxesHelper(5); // El tamaño de los ejes
+        sceneAxes.add(axesHelper);
+
+        // Crear y posicionar las etiquetas para cada eje
+        const labelX = createAxisLabel('X', '#ff4444');
+        labelX.position.set(6, 0, 0);
+        sceneAxes.add(labelX);
+
+        const labelY = createAxisLabel('Y', '#44ff44');
+        labelY.position.set(0, 6, 0);
+        sceneAxes.add(labelY);
+
+        const labelZ = createAxisLabel('Z', '#4444ff');
+        labelZ.position.set(0, 0, 6);
+        sceneAxes.add(labelZ);
+
+        const aspect = window.innerWidth / window.innerHeight;
+        // Usamos una cámara de perspectiva para el helper para que se vea bien al rotar
+        cameraAxes = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+        cameraAxes.position.z = 15; // Un poco alejada para ver bien los ejes
+        cameraAxes.up = camera.up; // Importante: usa la misma orientación "up" que tu cámara principal
+    }
+    setupAxesHelper();
+
+    // Controles
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.addEventListener('end', function() {
@@ -312,7 +482,7 @@
         if(v === 'top') camera.position.set(0, 0, 350);
         if(v === 'front') camera.position.set(0, -350, 0);
         if(v === 'side') camera.position.set(350, 0, 0);
-        if(v === 'iso') camera.position.set(0, -350, 350); 
+        if(v === 'iso') camera.position.set(-350, -350, 350); 
         camera.lookAt(0,0,0);
         controls.target.set(0,0,0);
 
@@ -570,6 +740,31 @@
         updateUI();
     }
 
+    function rotateSelectedObjects(axis) {
+    if (selectedObjects.length === 0) {
+        alert("Por favor, selecciona al menos un objeto para girar.");
+        return;
+    }
+
+    const angle = Math.PI / 2; // 90 grados en radianes
+
+    selectedObjects.forEach(obj => {
+        if (axis === 'x') {
+            obj.rotateX(angle);
+        } else if (axis === 'y') {
+            obj.rotateY(angle);
+        } else if (axis === 'z') {
+            obj.rotateZ(angle);
+        }
+    });
+
+    // Actualizar la interfaz y los controles de transformación
+    updateUI();
+    if (selectedObjects.length === 1) {
+        tControls.attach(selectedObjects[0]);
+    }
+    }
+
     // Vinculamos la nueva función a los botones del menú.
 
     document.getElementById('mod-espejo-x').onclick = () => mirrorSelectedObjects('x');
@@ -579,6 +774,10 @@
     document.getElementById('mod-alinear-x').onclick = () => alignSelectedObjects('x');
     document.getElementById('mod-alinear-y').onclick = () => alignSelectedObjects('y');
     document.getElementById('mod-alinear-z').onclick = () => alignSelectedObjects('z');
+
+    document.getElementById('mod-girar-x').onclick = () => rotateSelectedObjects('x');
+    document.getElementById('mod-girar-y').onclick = () => rotateSelectedObjects('y');
+    document.getElementById('mod-girar-z').onclick = () => rotateSelectedObjects('z');
 
     document.getElementById('mod-duplicate').onclick = () => {
         if (selectedObjects.length === 0) {
@@ -1239,7 +1438,48 @@ document.getElementById('mod-triangle').onclick = () => {
         selectedObjects.forEach(obj => {
             if(obj.userData.selectionBox) obj.userData.selectionBox.update();
         });
+
+        // Escena principal
+
+        renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+        renderer.clear();
         renderer.render(scene, camera);
+        renderer.clearDepth();
+
+        // --- DIBUJAR EJE DE REFERENCIA ---
+
+        const newAxesPosition = new THREE.Vector3().copy(camera.position);
+
+        // La normalizamos para obtener un vector de dirección puro (longitud 1)
+        newAxesPosition.normalize();
+
+        // La escalamos a la distancia que queremos que tenga la cámara de los ejes
+        newAxesPosition.multiplyScalar(15);
+
+        // Asignamos la nueva posición y la rotación
+        cameraAxes.position.copy(newAxesPosition);
+        cameraAxes.quaternion.copy(camera.quaternion);
+
+        // Definimos el área (viewport) donde se dibujarán los ejes
+        const helperWidth = Math.floor(window.innerWidth / 8);
+        const helperHeight = Math.floor(window.innerHeight / 8);
+
+        // Actualizamos el borde para que coincida con el viewport
+        const border = document.getElementById('axes-helper-border');
+        if (border) {
+            border.style.width = `${helperWidth}px`;
+            border.style.height = `${helperHeight}px`;
+        }
+        
+        // Posicionamos el viewport en la esquina inferior izquierda (con un pequeño margen)
+        renderer.setViewport(20, 40, helperWidth, helperHeight);
+
+        // Renderizamos la escena de los ejes en ese pequeño viewport
+        renderer.render(sceneAxes, cameraAxes);
+
+        // MUY IMPORTANTE: Restauramos el viewport al tamaño completo para el próximo frame
+        renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+        
     }
     
     animate();
@@ -1425,11 +1665,19 @@ document.getElementById('mod-triangle').onclick = () => {
 
     window.onresize = () => {
         const aspect = window.innerWidth / window.innerHeight;
+        // Actualizar cámara principal (Ortográfica)
         camera.left = frustumSize * aspect / -2;
         camera.right = frustumSize * aspect / 2;
         camera.top = frustumSize / 2;
         camera.bottom = frustumSize / -2;
         camera.updateProjectionMatrix();
+
+        // Actualizar cámara de los ejes (Perspectiva)
+        if (cameraAxes) {
+            cameraAxes.aspect = aspect;
+            cameraAxes.updateProjectionMatrix();
+        }
+
         renderer.setSize(window.innerWidth, window.innerHeight);
     };
 
@@ -1872,6 +2120,22 @@ document.getElementById('mod-triangle').onclick = () => {
         tControls.attach(selectedObject);
         updateUI();
     };
+
+// --- GESTIÓN DEL MODAL DE BIENVENIDA ---
+const welcomeModal = document.getElementById('welcome-modal-overlay');
+const closeWelcomeBtn = document.getElementById('welcome-close-btn');
+
+if (welcomeModal && closeWelcomeBtn) {
+    closeWelcomeBtn.addEventListener('click', () => {
+        // Efecto de desvanecimiento
+        welcomeModal.style.opacity = '0';
+        
+        // Tras la animación, ocultar el elemento para no interferir
+        setTimeout(() => {
+            welcomeModal.style.display = 'none';
+        }, 300); // Debe coincidir con la duración de la transición en CSS
+    });
+}
 
 </script>
 </body>
