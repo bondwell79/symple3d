@@ -187,6 +187,7 @@
         <div class="dropdown">
             <div class="drop-opt" onclick="document.getElementById('file-img').click()"><i class="fas fa-image"></i>Generar croquis desde imagen</div>
             <div class="drop-opt" id="mod-merge"><i class="fas fa-link"></i>Fusionar MESH</div>
+            <div class="drop-opt" id="mod-subtract"><i class="fas fa-link"></i>Sustraer MESH</div>
             <div class="drop-opt" id="mod-flip"><i class="fas fa-wand-magic-sparkles"></i>Reparar figura</div>
             <div class="drop-opt" id="mod-decimate"><i class="fas fa-dice-d6"></i>Reducir número de polígonos</div>
         </div>
@@ -233,6 +234,7 @@
             <div class="drop-opt" id="mod-sphere"><i class="fas fa-globe"></i>Añadir Esfera (mesh)</div>
             <div class="drop-opt" id="mod-triangle"><i class="fas fa-play"></i>Añadir Triángulo (croquis)</div>
             <div class="drop-opt" id="mod-cylinder"><i class="fas fa-database"></i>Añadir Cilindro (mesh)</div>
+            <div class="drop-opt" id="mod-tube"><i class="fas fa-database"></i>Añadir Tubo (mesh)</div>
         </div>
     </div>
     <div class="menu-item"><i class="fas fa-list"></i>Escena
@@ -889,6 +891,52 @@
         updateUI();
     };
 
+    document.getElementById('mod-subtract').onclick = () => {
+    const meshes = selectedObjects.filter(o => o.isMesh);
+    if (meshes.length !== 2) {
+        alert("Por favor, selecciona exactamente dos mallas 3D para sustraer. La segunda malla seleccionada se sustraerá de la primera.");
+        return;
+    }
+
+    // Para la sustracción, el orden importa. Asumimos que el primer objeto en el array es la base.
+    const baseMesh = meshes[0];
+    const subtractMesh = meshes[1];
+
+    // Actualiza las matrices del mundo para asegurar que las posiciones/rotaciones/escalas son correctas
+    baseMesh.updateMatrixWorld();
+    subtractMesh.updateMatrixWorld();
+
+    // Realizamos la operación booleana
+    const baseCsg = CSG.fromMesh(baseMesh);
+    const subtractCsg = CSG.fromMesh(subtractMesh);
+    const resultCsg = baseCsg.subtract(subtractCsg);
+
+    // Convertimos el resultado de vuelta a una malla de Three.js
+    const finalMesh = CSG.toMesh(resultCsg, baseMesh.matrix);
+    finalMesh.material = new THREE.MeshPhongMaterial({ color: getRandomPastelColor() });
+    finalMesh.userData.type = "MESH";
+    finalMesh.userData.creationType = "Malla Sustraída";
+    
+    // Limpiamos los objetos antiguos y añadimos el nuevo
+    tControls.detach();
+    meshes.forEach(mesh => {
+        removeSelectionHighlight(mesh);
+        scene.remove(mesh);
+    });
+    objects = objects.filter(o => !meshes.includes(o));
+    
+    recenterPivot(finalMesh);
+    
+    scene.add(finalMesh);
+    objects.push(finalMesh);
+    
+    // Seleccionamos el nuevo objeto
+    selectedObjects = [finalMesh];
+    applySelectionHighlight(finalMesh);
+    tControls.attach(finalMesh);
+    updateUI();
+    };
+
     document.getElementById('mod-decimate').onclick = () => {
     // Verificar que haya mallas seleccionadas
     const selectedMeshes = selectedObjects.filter(o => o.isMesh);
@@ -1198,6 +1246,44 @@
         updateUI();
     };
 
+    // Añadir tubo 3D directamente
+    document.getElementById('mod-tube').onclick = () => {
+        const outerRadius = 50;
+        const innerRadius = 40; // Define un radio interior para la pared del tubo
+        const height = 100;
+        const radialSegments = 32;
+
+        // 1. Crear dos geometrías de cilindro: una exterior y una interior para la sustracción.
+        const outerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(outerRadius, outerRadius, height, radialSegments));
+        const innerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(innerRadius, innerRadius, height, radialSegments));
+
+        // 2. Es crucial actualizar las matrices para que la sustracción funcione correctamente.
+        outerCylinder.updateMatrix();
+        innerCylinder.updateMatrix();
+
+        // 3. Realizar la operación de sustracción.
+        const tubeCSG = CSG.fromMesh(outerCylinder).subtract(CSG.fromMesh(innerCylinder));
+        
+        // 4. Convertir el resultado de nuevo a una malla de Three.js.
+        const mesh = CSG.toMesh(tubeCSG, outerCylinder.matrix);
+        mesh.material = new THREE.MeshPhongMaterial({ color: getRandomPastelColor() });
+        
+        // 5. Liberar la memoria de las geometrías temporales que ya no se necesitan.
+        outerCylinder.geometry.dispose();
+        innerCylinder.geometry.dispose();
+        
+        mesh.userData.type = "MESH";
+        mesh.userData.creationType = "Tubo";
+        scene.add(mesh);
+        objects.push(mesh);
+
+        clearAllHighlights();
+        selectedObjects = [mesh];
+        applySelectionHighlight(mesh);
+        tControls.attach(mesh);
+        updateUI();
+    };
+    
     // Añadir cilindro 3D directamente
     document.getElementById('mod-cylinder').onclick = () => {
         const radius = 50;
