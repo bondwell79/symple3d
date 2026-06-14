@@ -4,4 +4,4 @@ Un visualizador y editor de modelos 3D basado en la web.
 
 ## Autor
 
-Rubén Pastor Villarrubia
+Programado por Rubén Pastor Villarrubia
