@@ -322,7 +322,16 @@
     </div>
     <button id="btn-do-position">Aplicar</button>
 </div>
-
+<div id="creacionDialogo" style="display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; color: white;">
+    <h3 id="dialogoTitulo" style="margin: 0 0 15px 0;">Creación de elementos - Definir Dimensiones</h3>
+    <div id="dialogoCampos">
+        <!-- Los campos de input se generarán dinámicamente aquí -->
+    </div>
+    <div style="text-align: right; margin-top: 20px;">
+        <button id="cancelarBtn" style="background: #555; border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; margin-right: 10px;">Cancelar</button>
+        <button id="confirmarBtn" style="background: var(--accent); border: none; padding: 8px 15px; cursor: pointer; font-weight: bold;">Añadir</button>
+    </div>
+</div>
 <footer>
     <div class="status-part">
         <span>MODO: <b id="st-mode">SELECCIÓN</b></span>
@@ -484,6 +493,62 @@
         const lightness = 0.7 + Math.random() * 0.15; // Luminosidad entre 0.7 y 0.85
         return new THREE.Color().setHSL(hue, saturation, lightness);
     }
+
+    /**
+     * Muestra un diálogo genérico para introducir dimensiones y ejecutar una acción.
+     * @param {object} config - Configuración del diálogo.
+     * @param {string} config.titulo - Título que se mostrará en el diálogo.
+     * @param {Array<object>} config.campos - Un array de objetos, donde cada objeto define un campo de input.
+     *   Ejemplo: [{id: 'dimX', label: 'Ancho (X)', value: 10, type: 'number'}]
+     * @param {function} callback - La función que se ejecutará cuando el usuario presione 'Añadir'.
+     *   Recibirá un objeto con los valores de los campos como argumento.
+     */
+    function mostrarDialogoDimensiones(config, callback) {
+        const dialogo = document.getElementById('creacionDialogo');
+        const tituloEl = document.getElementById('dialogoTitulo');
+        const camposEl = document.getElementById('dialogoCampos');
+        const confirmarBtn = document.getElementById('confirmarBtn');
+        const cancelarBtn = document.getElementById('cancelarBtn');
+
+        // Configurar título y campos dinámicamente
+        tituloEl.textContent = config.titulo;
+        camposEl.innerHTML = ''; // Limpiar campos de usos anteriores
+        config.campos.forEach(campo => {
+            const campoHTML = `
+                <div style="margin-bottom: 10px;">
+                    <label for="${campo.id}" style="display: inline-block; width: 120px;">${campo.label}:</label>
+                    <input type="${campo.type || 'number'}" id="${campo.id}" value="${campo.value}" style="width: 100px; background: #444; color: white; border: 1px solid #555; padding: 5px;">
+                </div>
+            `;
+            camposEl.innerHTML += campoHTML;
+        });
+
+        // Mostrar el diálogo
+        dialogo.style.display = 'block';
+
+        // Función para manejar el clic en 'Confirmar'
+        const onConfirmar = () => {
+            const dimensiones = {};
+            config.campos.forEach(campo => {
+                const input = document.getElementById(campo.id);
+                dimensiones[campo.id] = (input.type === 'number') ? parseFloat(input.value) || 0 : input.value;
+            });
+            
+            callback(dimensiones);
+            cerrarDialogo();
+        };
+
+        // Función para cerrar el diálogo y limpiar eventos
+        const cerrarDialogo = () => {
+            dialogo.style.display = 'none';
+            confirmarBtn.removeEventListener('click', onConfirmar);
+            cancelarBtn.removeEventListener('click', cerrarDialogo);
+        };
+
+        // Añadir los event listeners
+        confirmarBtn.addEventListener('click', onConfirmar);
+        cancelarBtn.addEventListener('click', cerrarDialogo);
+        }
 
     // --- VISTAS ---
     window.setView = (v) => {
@@ -1170,186 +1235,249 @@
 
     // Añadir Rectángulo como Croquis
     document.getElementById('mod-plane').onclick = () => {
-        const width = 100;
-        const height = 60;
-        const shape = new THREE.Shape([
-            new THREE.Vector2(-width / 2, -height / 2),
-            new THREE.Vector2(width / 2, -height / 2),
-            new THREE.Vector2(width / 2, height / 2),
-            new THREE.Vector2(-width / 2, height / 2)
-        ]);
 
-        const group = new THREE.Group();
-        group.userData.type = "SKETCH";
-        group.userData.creationType = "Rectángulo";
-        // Formato unificado:
-        group.userData.shapesForExtrusion = [shape]; 
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Rectángulo',
+        campos: [
+            { id: 'ancho', label: 'Ancho', value: 100 },
+            { id: 'alto', label: 'Alto', value: 60 }
+        ]
+        }, (dims) => {
+                        const width = dims.ancho;
+                        const height = dims.alto;
+                        const shape = new THREE.Shape([
+                            new THREE.Vector2(-width / 2, -height / 2),
+                            new THREE.Vector2(width / 2, -height / 2),
+                            new THREE.Vector2(width / 2, height / 2),
+                            new THREE.Vector2(-width / 2, height / 2)
+                        ]);
 
-        const points = shape.getPoints();
-        const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
-    
-        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-        group.add(line);
-        
-        scene.add(group);
-        objects.push(group);
+                        const group = new THREE.Group();
+                        group.userData.type = "SKETCH";
+                        group.userData.creationType = "Rectángulo";
+                        // Formato unificado:
+                        group.userData.shapesForExtrusion = [shape]; 
 
-        clearAllHighlights();
-        selectedObjects = [group];
-        tControls.attach(group);
-        updateUI();
+                        const points = shape.getPoints();
+                        const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]);
+                    
+                        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                        group.add(line);
+                        
+                        scene.add(group);
+                        objects.push(group);
+
+                        clearAllHighlights();
+                        selectedObjects = [group];
+                        tControls.attach(group);
+                        updateUI();
+        });
+
     };
 
     // Añadir Círculo como Croquis
     document.getElementById('mod-circulo').onclick = () => {
-        const radius = 50;
-        const shape = new THREE.Shape();
-        shape.arc(0, 0, radius, 0, 2 * Math.PI, false);
-        shape.closePath();
 
-        
-        const group = new THREE.Group();
-        group.userData.type = "SKETCH";
-        group.userData.creationType = "Círculo";
-        // Formato unificado:
-        group.userData.shapesForExtrusion = [shape]; 
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Circulo',
+        campos: [
+            { id: 'radio', label: 'Radio', value: 50 }
+        ]
+        }, (dims) => {
+                    const radius = dims.radio;
+                    const shape = new THREE.Shape();
+                    shape.arc(0, 0, radius, 0, 2 * Math.PI, false);
+                    shape.closePath();
 
-        const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints(50));
+                    
+                    const group = new THREE.Group();
+                    group.userData.type = "SKETCH";
+                    group.userData.creationType = "Círculo";
+                    // Formato unificado:
+                    group.userData.shapesForExtrusion = [shape]; 
 
-        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-        group.add(line);
-        
-        scene.add(group);
-        objects.push(group);
+                    const geometry = new THREE.BufferGeometry().setFromPoints(shape.getPoints(50));
 
-        clearAllHighlights();
-        selectedObjects = [group];
-        tControls.attach(group);
-        updateUI();
+                    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                    group.add(line);
+                    
+                    scene.add(group);
+                    objects.push(group);
+
+                    clearAllHighlights();
+                    selectedObjects = [group];
+                    tControls.attach(group);
+                    updateUI();
+                    });
     };
 
     // Añadir Esfera 3D directamente
     document.getElementById('mod-sphere').onclick = () => {
-        const radius = 50;
-        const geometry = new THREE.SphereGeometry(radius, 32, 16);
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
-        mesh.userData.type = "MESH";
-        mesh.userData.creationType = "Esfera";
-        
-        scene.add(mesh);
-        objects.push(mesh);
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones de la Esfera',
+        campos: [
+            { id: 'radio', label: 'Radio', value: 50 },
+        ]
+        }, (dims) => {
 
-        clearAllHighlights();
-        selectedObjects = [mesh];
-        applySelectionHighlight(mesh);
-        tControls.attach(mesh);
-        updateUI();
+                    const radius = dims.radio;
+                    const geometry = new THREE.SphereGeometry(radius, 32, 16);
+                    const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
+                    mesh.userData.type = "MESH";
+                    mesh.userData.creationType = "Esfera";
+                    
+                    scene.add(mesh);
+                    objects.push(mesh);
+
+                    clearAllHighlights();
+                    selectedObjects = [mesh];
+                    applySelectionHighlight(mesh);
+                    tControls.attach(mesh);
+                    updateUI();
+                    
+                    });
     };
 
     // Añadir tubo 3D directamente
     document.getElementById('mod-tube').onclick = () => {
-        const outerRadius = 50;
-        const innerRadius = 40; // Define un radio interior para la pared del tubo
-        const height = 100;
-        const radialSegments = 32;
 
-        // 1. Crear dos geometrías de cilindro: una exterior y una interior para la sustracción.
-        const outerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(outerRadius, outerRadius, height, radialSegments));
-        const innerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(innerRadius, innerRadius, height, radialSegments));
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Tubo',
+        campos: [
+            { id: 'ancho', label: 'Ancho', value: 20 },
+            { id: 'alto', label: 'Alto', value: 50 },
+            { id: 'grosor', label: 'Grosor', value: 5 }
+        ]
+        }, (dims) => {
+                        const outerRadius = dims.ancho;
+                        const innerRadius = dims.ancho-dims.grosor; // Define un radio interior para la pared del tubo
+                        const height = dims.alto;
+                        const radialSegments = 32;
 
-        // 2. Es crucial actualizar las matrices para que la sustracción funcione correctamente.
-        outerCylinder.updateMatrix();
-        innerCylinder.updateMatrix();
+                        // 1. Crear dos geometrías de cilindro: una exterior y una interior para la sustracción.
+                        const outerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(outerRadius, outerRadius, height, radialSegments));
+                        const innerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(innerRadius, innerRadius, height, radialSegments));
 
-        // 3. Realizar la operación de sustracción.
-        const tubeCSG = CSG.fromMesh(outerCylinder).subtract(CSG.fromMesh(innerCylinder));
-        
-        // 4. Convertir el resultado de nuevo a una malla de Three.js.
-        const mesh = CSG.toMesh(tubeCSG, outerCylinder.matrix);
-        mesh.material = new THREE.MeshPhongMaterial({ color: getRandomPastelColor() });
-        
-        // 5. Liberar la memoria de las geometrías temporales que ya no se necesitan.
-        outerCylinder.geometry.dispose();
-        innerCylinder.geometry.dispose();
-        
-        mesh.userData.type = "MESH";
-        mesh.userData.creationType = "Tubo";
-        scene.add(mesh);
-        objects.push(mesh);
+                        // 2. Es crucial actualizar las matrices para que la sustracción funcione correctamente.
+                        outerCylinder.updateMatrix();
+                        innerCylinder.updateMatrix();
 
-        clearAllHighlights();
-        selectedObjects = [mesh];
-        applySelectionHighlight(mesh);
-        tControls.attach(mesh);
-        updateUI();
+                        // 3. Realizar la operación de sustracción.
+                        const tubeCSG = CSG.fromMesh(outerCylinder).subtract(CSG.fromMesh(innerCylinder));
+                        
+                        // 4. Convertir el resultado de nuevo a una malla de Three.js.
+                        const mesh = CSG.toMesh(tubeCSG, outerCylinder.matrix);
+                        mesh.material = new THREE.MeshPhongMaterial({ color: getRandomPastelColor() });
+                        
+                        // 5. Liberar la memoria de las geometrías temporales que ya no se necesitan.
+                        outerCylinder.geometry.dispose();
+                        innerCylinder.geometry.dispose();
+                        
+                        mesh.userData.type = "MESH";
+                        mesh.userData.creationType = "Tubo";
+                        scene.add(mesh);
+                        objects.push(mesh);
+
+                        clearAllHighlights();
+                        selectedObjects = [mesh];
+                        applySelectionHighlight(mesh);
+                        tControls.attach(mesh);
+                        updateUI();
+
+                        });        
     };
     
     // Añadir cilindro 3D directamente
     document.getElementById('mod-cylinder').onclick = () => {
-        const radius = 50;
-        const height = 100;
-        const geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
-        mesh.userData.type = "MESH";
-        mesh.userData.creationType = "Cilindro";
-        scene.add(mesh);
-        objects.push(mesh);
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Cilindro',
+        campos: [
+            { id: 'radio', label: 'Radio', value: 50 },
+            { id: 'alto', label: 'Alto', value: 100 },
+        ]
+        }, (dims) => {
+                        const radius = dims.radio;
+                        const height = dims.alto;
+                        const geometry = new THREE.CylinderGeometry(radius, radius, height, 32);
+                        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
+                        mesh.userData.type = "MESH";
+                        mesh.userData.creationType = "Cilindro";
+                        scene.add(mesh);
+                        objects.push(mesh);
 
-        clearAllHighlights();
-        selectedObjects = [mesh];
-        applySelectionHighlight(mesh);
-        tControls.attach(mesh);
-        updateUI();
+                        clearAllHighlights();
+                        selectedObjects = [mesh];
+                        applySelectionHighlight(mesh);
+                        tControls.attach(mesh);
+                        updateUI();
+                        });
     };
 
     // Añadir cubo 3D directamente
     document.getElementById('mod-cube').onclick = () => {
-        const size = 50;
-        const geometry = new THREE.BoxGeometry(size, size, size);
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
-        mesh.userData.type = "MESH";
-        mesh.userData.creationType = "Cubo";
-        scene.add(mesh);
-        objects.push(mesh);
+        
+        mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Cubo',
+        campos: [
+            { id: 'tamaño', label: 'Tamaño', value: 50 },
+        ]
+        }, (dims) => {
+                    const size = dims.tamaño;
+                    const geometry = new THREE.BoxGeometry(size, size, size);
+                    const mesh = new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({ color: getRandomPastelColor() }));
+                    mesh.userData.type = "MESH";
+                    mesh.userData.creationType = "Cubo";
+                    scene.add(mesh);
+                    objects.push(mesh);
 
-        clearAllHighlights();
-        selectedObjects = [mesh];
-        applySelectionHighlight(mesh);
-        tControls.attach(mesh);
-        updateUI();
+                    clearAllHighlights();
+                    selectedObjects = [mesh];
+                    applySelectionHighlight(mesh);
+                    tControls.attach(mesh);
+                    updateUI();
+                    });
     };
 
     // Añadir Triángulo como croquis  directamente
 document.getElementById('mod-triangle').onclick = () => {
-    const shape = new THREE.Shape();
-    const width = 60;
-    const height = 50;
+    mostrarDialogoDimensiones({
+        titulo: 'Dimensiones del Triángulo',
+        campos: [
+            { id: 'base', label: 'Base', value: 60 },
+            { id: 'altura', label: 'Altura', value: 50 },
+        ]
+        }, (dims) => {
+                        const shape = new THREE.Shape();
+                        const width = dims.base;
+                        const height = dims.altura;
 
-    // Dibuja la forma del triángulo
-    shape.moveTo(0, height / 2); // Vértice superior
-    shape.lineTo(width / 2, -height / 2); // Vértice inferior derecho
-    shape.lineTo(-width / 2, -height / 2); // Vértice inferior izquierdo
-    shape.closePath(); // Cierra la forma
+                        // Dibuja la forma del triángulo
+                        shape.moveTo(0, height / 2); // Vértice superior
+                        shape.lineTo(width / 2, -height / 2); // Vértice inferior derecho
+                        shape.lineTo(-width / 2, -height / 2); // Vértice inferior izquierdo
+                        shape.closePath(); // Cierra la forma
 
-    const group = new THREE.Group();
-    group.userData.type = "SKETCH";
-    group.userData.creationType = "Triángulo";
-    group.userData.shapesForExtrusion = [shape];
+                        const group = new THREE.Group();
+                        group.userData.type = "SKETCH";
+                        group.userData.creationType = "Triángulo";
+                        group.userData.shapesForExtrusion = [shape];
 
-    const points = shape.getPoints();
-    // Asegúrate de añadir el primer punto al final para cerrar la línea visualmente
-    const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]); 
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
-    group.add(line);
-    
-    // Añade el objeto a la escena y lo selecciona
-    scene.add(group);
-    objects.push(group);
+                        const points = shape.getPoints();
+                        // Asegúrate de añadir el primer punto al final para cerrar la línea visualmente
+                        const geometry = new THREE.BufferGeometry().setFromPoints([...points, points[0]]); 
+                        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00d2ff, linewidth: 2 }));
+                        group.add(line);
+                        
+                        // Añade el objeto a la escena y lo selecciona
+                        scene.add(group);
+                        objects.push(group);
 
-    clearAllHighlights();
-    selectedObjects = [group];
-    tControls.attach(group);
-    updateUI();
+                        clearAllHighlights();
+                        selectedObjects = [group];
+                        tControls.attach(group);
+                        updateUI();
+                    });
+
     };
 
     // --- EXTRUSIÓN ACTUALIZADA ---
@@ -2075,47 +2203,47 @@ document.getElementById('mod-triangle').onclick = () => {
         const textModal = document.getElementById('text-modal');
         const positionModal = document.getElementById('position-modal');
         const dimensionsModal = document.getElementById('dimensions-modal');
+        const creacionDialogo = document.getElementById('creacionDialogo');
 
+        const isModalOpen = (extrudeModal && extrudeModal.style.display === 'block') ||
+                            (scaleModal && scaleModal.style.display === 'block') ||
+                            (textModal && textModal.style.display === 'block') ||
+                            (positionModal && positionModal.style.display === 'block') ||
+                            (dimensionsModal && dimensionsModal.style.display === 'block') ||
+                            (creacionDialogo && creacionDialogo.style.display === 'block');
+       
         
         // Esc para deseleccionar y volver a modo selección
         if (e.key === 'Escape') {
 
-        // Si algún modal está abierto, lo cerramos y salimos sin cambiar la selección
-        if (extrudeModal && extrudeModal.style.display === 'block' ||
-            scaleModal && scaleModal.style.display === 'block' ||
-            textModal && textModal.style.display === 'block' ||
-            positionModal && positionModal.style.display === 'block' ||
-            dimensionsModal && dimensionsModal.style.display === 'block') 
-                {
-                extrudeModal.style.display = 'none';
-                scaleModal.style.display = 'none';
-                textModal.style.display = 'none';
-                positionModal.style.display = 'none';
-                dimensionsModal.style.display = 'none';
-                return; 
-                }
-        
-        // si no hay modales abiertos, entonces deseleccionamos y volvemos a modo selección
-        setMode('SELECT');
-        if (selectedObjects.length > 0) {
-            clearAllHighlights();
-            tControls.detach();
-            selectedObjects = [];
-            updateUI();
-        }
-        }
-        
+                                // Si algún modal está abierto, lo cerramos y salimos sin cambiar la selección
+                                if (isModalOpen)
+                                        {
+                                        extrudeModal.style.display = 'none';
+                                        scaleModal.style.display = 'none';
+                                        textModal.style.display = 'none';
+                                        positionModal.style.display = 'none';
+                                        dimensionsModal.style.display = 'none';
+                                        creacionDialogo.style.display = 'none';
+                                        return; 
+                                        } else {
+                                                // si no hay modales abiertos, entonces deseleccionamos y volvemos a modo selección
+                                                setMode('SELECT');
+                                                if (selectedObjects.length > 0) {
+                                                                                    clearAllHighlights();
+                                                                                    tControls.detach();
+                                                                                    selectedObjects = [];
+                                                                                    updateUI();
+                                                                                }
+                                                }
+                                }
         // Suprimir o Backspace para borrar objeto
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjects.length > 0) 
             {
 
             // Si hay algún modal abierto, lo cerramos y salimos sin borrar nada
-            if (extrudeModal && extrudeModal.style.display === 'block' ||
-                scaleModal && scaleModal.style.display === 'block' ||
-                textModal && textModal.style.display === 'block' ||
-                positionModal && positionModal.style.display === 'block' ||
-                dimensionsModal && dimensionsModal.style.display === 'block') 
-                    {
+            if (isModalOpen) {
+
                     return; 
                     }
 
@@ -2123,29 +2251,34 @@ document.getElementById('mod-triangle').onclick = () => {
             }
 
         // Atajos de Transformación
-        if (e.key.toLowerCase() === 't') tControls.setMode('translate'); // Mover
-        if (e.key.toLowerCase() === 'r') tControls.setMode('rotate');    // Rotar
-        if (e.key.toLowerCase() === 's') tControls.setMode('scale');     // Escalar
-        if (e.key.toLowerCase() === 'p') openPositionModal();
+        if (!isModalOpen) {
         
-        if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
-            const orbitStep = 0.1;
-            const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
-            
-            
-            const x = camera.position.x;
-            const y = camera.position.y;
-            
-            const cos = Math.cos(orbitStep * direction);
-            const sin = Math.sin(orbitStep * direction);
-            
-            camera.position.x = x * cos - y * sin;
-            camera.position.y = x * sin + y * cos;
-            
-            camera.lookAt(0, 0, 0);
-            controls.update();
+                            if (e.key.toLowerCase() === 't') tControls.setMode('translate'); // Mover
+                            if (e.key.toLowerCase() === 'r') tControls.setMode('rotate');    // Rotar
+                            if (e.key.toLowerCase() === 's') tControls.setMode('scale');     // Escalar
+                            if (e.key.toLowerCase() === 'p') openPositionModal();
+                            
+                            if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
+                                                                                                const orbitStep = 0.1;
+                                                                                                const direction = (e.key.toLowerCase() === 'a') ? 1 : -1;
+                                                                                                
+                                                                                                
+                                                                                                const x = camera.position.x;
+                                                                                                const y = camera.position.y;
+                                                                                                
+                                                                                                const cos = Math.cos(orbitStep * direction);
+                                                                                                const sin = Math.sin(orbitStep * direction);
+                                                                                                
+                                                                                                camera.position.x = x * cos - y * sin;
+                                                                                                camera.position.y = x * sin + y * cos;
+                                                                                                
+                                                                                                camera.lookAt(0, 0, 0);
+                                                                                                controls.update();
+                                                                                            }
+
+                                                                                        }
         }
-    }
+    
     window.addEventListener('keydown', globalKeyDownHandler);
 
     // --- DIÁLOGO DE DIMENSIONES (X, Y, Z) ---
