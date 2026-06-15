@@ -41,15 +41,15 @@
         .tool-btn.active { background: var(--accent); color: #000; font-weight: bold; }
         .tool-btn.action { background: #4caf50; border: none; display: none; }
 
-        #extrude-modal, #scale-modal, #text-modal, #dimensions-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
+        #extrude-modal, #scale-modal, #text-modal, #dimensions-modal, #creacionDialogo, #position-modal { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; color: white;}
         input[type="file"] { display: none; }
         canvas#img-processor { display: none; }
 
-        #position-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; }
         #position-modal h4 { margin: 0 0 15px 0; }
         #position-modal label { display: inline-block; width: 30px; }
         #position-modal input { width: 80px; margin-bottom: 10px; }
         #position-modal button { background: var(--accent); border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; }
+        
 
         .scene-obj { padding: 8px 15px; font-size: 12px; border-bottom: 1px solid #333; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .scene-obj:hover { background: #094771; }
@@ -83,82 +83,82 @@
             transition: opacity 0.3s ease;
         }
 
-    #welcome-modal {
-        background: var(--ui);
-        padding: 30px 40px;
-        border-radius: 12px;
-        border: 1px solid #444;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        text-align: center;
-        width: 90%;
-        max-width: 500px;
-        color: #eee;
-        animation: fadeInScale 0.4s ease-out;
-    }
-
-    @keyframes fadeInScale {
-        from {
-            opacity: 0;
-            transform: scale(0.95);
+        #welcome-modal {
+            background: var(--ui);
+            padding: 30px 40px;
+            border-radius: 12px;
+            border: 1px solid #444;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+            color: #eee;
+            animation: fadeInScale 0.4s ease-out;
         }
-        to {
-            opacity: 1;
-            transform: scale(1);
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
-    }
 
-    #welcome-modal h2 {
-        margin-top: 0;
-        color: var(--accent);
-        font-size: 24px;
-        font-weight: 600;
-    }
+        #welcome-modal h2 {
+            margin-top: 0;
+            color: var(--accent);
+            font-size: 24px;
+            font-weight: 600;
+        }
 
-    #welcome-modal .version {
-        margin: -10px 0 20px 0;
-        font-size: 14px;
-        color: #999;
-    }
+        #welcome-modal .version {
+            margin: -10px 0 20px 0;
+            font-size: 14px;
+            color: #999;
+        }
 
-    #welcome-modal .credits {
-        margin: 25px 0;
-        font-size: 14px;
-        line-height: 1.6;
-    }
+        #welcome-modal .credits {
+            margin: 25px 0;
+            font-size: 14px;
+            line-height: 1.6;
+        }
 
-    #welcome-modal .credits p {
-        margin: 5px 0;
-    }
+        #welcome-modal .credits p {
+            margin: 5px 0;
+        }
 
-    #welcome-modal .credits strong {
-        color: #ccc;
-    }
+        #welcome-modal .credits strong {
+            color: #ccc;
+        }
 
-    #welcome-close-btn {
-        background: var(--accent);
-        border: none;
-        padding: 12px 25px;
-        cursor: pointer;
-        font-weight: bold;
-        margin-top: 15px;
-        width: 100%;
-        border-radius: 6px;
-        color: #000;
-        font-size: 16px;
-        transition: background-color 0.2s, transform 0.2s;
-    }
+        #welcome-close-btn {
+            background: var(--accent);
+            border: none;
+            padding: 12px 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 15px;
+            width: 100%;
+            border-radius: 6px;
+            color: #000;
+            font-size: 16px;
+            transition: background-color 0.2s, transform 0.2s;
+        }
 
-    #welcome-close-btn:hover {
-        background: #00b8e6;
-        transform: translateY(-2px);
-    }
+        #welcome-close-btn:hover {
+            background: #00b8e6;
+            transform: translateY(-2px);
+        }
 </style>
 </head>
 <body>
 <div id="welcome-modal-overlay">
     <div id="welcome-modal">
         <h2>Bienvenido a Symple3D</h2>
-        <p class="version">Versión 1.1</p>
+        <p class="version">Versión 1.2</p>
         <div class="credits">
             <p>Un editor 3D simple y de código abierto para tus proyectos.</p>
             <p>Wasx Alpha Software 1984, 2026</p>
@@ -322,7 +322,7 @@
     </div>
     <button id="btn-do-position">Aplicar</button>
 </div>
-<div id="creacionDialogo" style="display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #2d2d2d; padding: 20px; border-radius: 8px; z-index: 3000; border: 1px solid var(--accent); box-shadow: 0 0 40px #000; color: white;">
+<div id="creacionDialogo">
     <h3 id="dialogoTitulo" style="margin: 0 0 15px 0;">Creación de elementos - Definir Dimensiones</h3>
     <div id="dialogoCampos">
         <!-- Los campos de input se generarán dinámicamente aquí -->
@@ -1009,8 +1009,16 @@
         alert("Por favor, selecciona al menos una malla 3D para simplificar.");
         return;
     }
-    const ratio = 0.5;
-    decimateMeshes(ratio);
+    mostrarDialogoDimensiones({
+        titulo: 'Ratio de simplificación',
+        campos: [
+            { id: 'ratio', label: 'Ratio', value: 90, type: 'number', min: 75, max: 100}
+        ]
+        }, (dims) => {
+                        const ratio = dims.ratio;
+                        decimateMeshes(ratio/100); // Convertimos a un valor entre 0 y 1
+                    });
+    
     };
 
     /**
@@ -1065,8 +1073,6 @@
             tControls.attach(selectedObjects[0]);
         }
         updateUI();
-
-        alert(`Proceso completado. La(s) figura(s) ha(n) sido reducida(s) al ${ratio * 100}% de polígonos.`);
     }
     
     document.getElementById('mod-flip').onclick = () => {
@@ -1102,8 +1108,7 @@
             
             // Recalculamos las normales para una iluminación correcta
             geometry.computeVertexNormals();
-            
-            alert("Objeto reparado");
+            updateUI();
         }
     };
 
@@ -2186,7 +2191,7 @@ document.getElementById('mod-triangle').onclick = () => {
                 path.push({ x: currentPoint.x, y: currentPoint.y });
                 } 
                       
-        } while ((currentPoint.x !== startPoint.x || currentPoint.y !== startPoint.y) && path.length < 1000); // Evitar bucles infinitos
+        } while ((currentPoint.x !== startPoint.x || currentPoint.y !== startPoint.y) && path.length < 16000); // Evitar bucles infinitos
         if (path.length > 0) { path.push({ x: startPoint.x, y: startPoint.y }); }
                                                     
         alert(`Contorno trazado con ${path.length} puntos.`);
