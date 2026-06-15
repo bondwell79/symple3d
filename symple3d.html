@@ -2320,15 +2320,24 @@ document.getElementById('mod-triangle').onclick = () => {
     document.getElementById('btn-do-dimensions').onclick = () => {
         if (selectedObjects.length !== 1) return;
         const selectedObject = selectedObjects[0];
-
+        const isMesh = selectedObject.userData.type === 'MESH';
         const newX = parseFloat(document.getElementById('dim-x').value);
         const newY = parseFloat(document.getElementById('dim-y').value);
         const newZ = parseFloat(document.getElementById('dim-z').value);
 
-        if (isNaN(newX) || isNaN(newY) || isNaN(newZ) || newX <= 0 || newY <= 0 || newZ <= 0) {
-            alert("Por favor, introduce valores numéricos positivos para todas las dimensiones.");
-            return;
-        }
+        if (isMesh) {
+            // Mesh 3D
+            if (isNaN(newX) || isNaN(newY) || isNaN(newZ) || newX <= 0 || newY <= 0 || newZ <= 0) {
+                                        alert("Por favor, introduce valores numéricos positivos para todas las dimensiones.");
+                                        return;
+                                        }
+        } else {
+                // Croquis
+                if (isNaN(newX) || isNaN(newY) || isNaN(newZ) || newX <= 0 || newY <= 0) {
+                                        alert("Por favor, introduce valores numéricos positivos para todas las dimensiones XY.");
+                                        return;
+                                        }
+                }
         
         // Calcular el tamaño actual
         const box = new THREE.Box3().setFromObject(selectedObject);
@@ -2340,12 +2349,15 @@ document.getElementById('mod-triangle').onclick = () => {
         const scaleX = currentSize.x > 0 ? newX / currentSize.x : 0;
         const scaleY = currentSize.y > 0 ? newY / currentSize.y : 0;
         const scaleZ = currentSize.z > 0 ? newZ / currentSize.z : 0;
-
-        // Aplicar la escala
-        selectedObject.scale.x *= scaleX;
-        selectedObject.scale.y *= scaleY;
-        selectedObject.scale.z *= scaleZ;
-
+        if (isMesh) {
+                    selectedObject.scale.x *= scaleX;
+                    selectedObject.scale.y *= scaleY;
+                    selectedObject.scale.z *= scaleZ;
+        } else {
+                selectedObject.scale.x *= scaleX;
+                selectedObject.scale.y *= scaleY;
+                }
+        
         // Actualizar UI y cerrar modal
         document.getElementById('dimensions-modal').style.display = 'none';
         tControls.attach(selectedObject);
