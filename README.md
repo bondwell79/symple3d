@@ -1,12 +1,7 @@
 # Symple3D v 1.1
 
 Un visualizador y editor de modelos 3D basado en la web.
-
-## Demo Online
-
-Puedes probar una demostración en vivo de Symple3D en la siguiente dirección:
-
-[symple3d.andromeda79.synology.me](http://symple3d.andromeda79.synology.me)
+https://bondwell79.github.io/symple3d/
 
 ---
 
