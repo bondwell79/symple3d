@@ -1,4 +1,4 @@
-# Symple3D v 1.1
+# Symple3D
 
 Un visualizador y editor de modelos 3D basado en la web.
 
